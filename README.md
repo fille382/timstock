@@ -182,8 +182,12 @@ klumpa ihop sig.
 Varje tumstock har också en egen vikning: `segs` är antalet skänklar och
 `spread` hur öppen den är, från hårt hopvikt till nästan utfälld. Skänklarna
 måste vikas flackt — med spetsig vinkel och runda ändar blir formen fåglar i
-stället. Nitarna i lederna stansas ur i bakgrundsfärgen, och det är den detaljen
-som gör mest för igenkänningen.
+stället.
+
+Detaljerna räknas fram ur skänklarnas riktning, så att de följer med när
+vikningen ändras: raka avslut med ett bredare metallskydd i vardera änden, nitar
+i lederna (urstansade i bakgrundsfärgen), och måttstreck längs ena kanten —
+långa för cm, korta för mm.
 
 Allt är dekor: lagret är `aria-hidden`, tar inga klick, och släcks vid utskrift
 så att fakturan blir ren. Rörelsen stängs av för den som valt reducerad

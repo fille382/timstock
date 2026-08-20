@@ -129,24 +129,85 @@
     return pts;
   }
 
+  /* Kort bit av strackan a -> b, anvands for metallskydden i andarna. */
+  function stub(a, b, len) {
+    var dx = b[0] - a[0];
+    var dy = b[1] - a[1];
+    var m = Math.sqrt(dx * dx + dy * dy) || 1;
+    return 'M' + a[0] + ' ' + a[1]
+      + ' L' + (a[0] + dx / m * len) + ' ' + (a[1] + dy / m * len);
+  }
+
+  var HALF = 6.5;   // halva skankelns bredd
+  var MM_STEP = 3;  // avstand mellan de korta strecken
+  var PER_CM = 5;   // antal korta streck per langt
+
+  function r1(n) { return Math.round(n * 10) / 10; }
+
+  /* Mattstrecken langs en skankel: langa for cm, korta for mm. De utgar fran
+     ena kanten precis som pa en riktig tumstock. Strecken hoppas over narmast
+     andarna och lederna, dar metallskydd och nitar sitter. */
+  function marks(a, b) {
+    var dx = b[0] - a[0];
+    var dy = b[1] - a[1];
+    var m = Math.sqrt(dx * dx + dy * dy) || 1;
+    var ux = dx / m, uy = dy / m;
+    var px = -uy, py = ux;
+    var out = { cm: '', mm: '' };
+    var n = 0;
+
+    for (var s = 12; s <= m - 12; s += MM_STEP) {
+      var long = n % PER_CM === 0;
+      var len = long ? 7 : 3.5;
+      var cx = a[0] + ux * s;
+      var cy = a[1] + uy * s;
+
+      var seg = 'M' + r1(cx + px * HALF) + ' ' + r1(cy + py * HALF)
+        + 'L' + r1(cx + px * (HALF - len)) + ' ' + r1(cy + py * (HALF - len));
+
+      if (long) out.cm += seg; else out.mm += seg;
+      n++;
+    }
+
+    return out;
+  }
+
   function rulerSVG(t) {
     var pts = fold(t);
+    var last = pts.length - 1;
 
     var d = pts.map(function (p, i) {
       return (i ? 'L' : 'M') + p[0] + ' ' + p[1];
     }).join(' ');
 
-    /* Nitarna i bada andar och i varje led stansas ur i sidans bakgrundsfarg.
-       Det ar den detaljen som far formen att lasas som en tumstock. */
-    var rivets = pts.map(function (p) {
+    /* Nitar i lederna, men inte i andarna - dar sitter metallskydden.
+       Nitarna stansas ur i sidans bakgrundsfarg. */
+    var rivets = pts.slice(1, last).map(function (p) {
       return '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="3.4"/>';
     }).join('');
+
+    /* Metallskydden ar nagot bredare an traet och sitter kant i kant med den
+       raka anden - darfor butt-kapade skanklar och inte rundade. */
+    var caps = '<path d="' + stub(pts[0], pts[1], 11) + '"/>'
+      + '<path d="' + stub(pts[last], pts[last - 1], 11) + '"/>';
+
+    var cm = '', mm = '';
+    for (var i = 0; i < last; i++) {
+      var mk = marks(pts[i], pts[i + 1]);
+      cm += mk.cm;
+      mm += mk.mm;
+    }
 
     return '<svg viewBox="0 0 ' + (t.reach + PAD * 2) + ' ' + BOX_H + '" style="'
       + '--x:' + t.x + '%;--y:' + t.y + '%;--w:' + t.w + 'px;'
       + '--rot:' + t.rot + 'deg;--dur:' + t.dur + 's;--delay:' + t.delay + 's">'
       + '<path d="' + d + '" fill="none" stroke="currentColor" stroke-width="13"'
-      + ' stroke-linecap="round" stroke-linejoin="round"/>'
+      + ' stroke-linecap="butt" stroke-linejoin="round"/>'
+      + '<g fill="none" stroke="currentColor" stroke-linecap="butt">'
+      + '<path d="' + mm + '" stroke-width="1.1"/>'
+      + '<path d="' + cm + '" stroke-width="1.6"/>'
+      + '<g stroke-width="16">' + caps + '</g>'
+      + '</g>'
       + '<g fill="var(--bg)">' + rivets + '</g></svg>';
   }
 
