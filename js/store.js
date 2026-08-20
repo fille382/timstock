@@ -376,20 +376,27 @@
      billable* = vad den faktiskt far faktureras for. Pa ett fastprisjobb ar
      arbetet inbakat i det avtalade priset och ger darfor noll. */
 
+  /* ATA = andrings- och tillaggsarbete. En post markt som ATA ligger utanfor
+     det avtalade priset och faktureras darfor alltid, aven pa ett fastprisjobb.
+     Markningen betyder inget pa lopande rakning. */
+  function isAta(obj) {
+    return !!(obj && obj.ata) && isFixed(obj.projectId);
+  }
+
   function entryAmount(e) {
     return round2(Number(e.hours || 0) * rateFor(e.clientId, e.projectId));
   }
 
   function billableEntry(e) {
-    return isFixed(e.projectId) ? 0 : entryAmount(e);
+    return (isFixed(e.projectId) && !e.ata) ? 0 : entryAmount(e);
   }
 
   function billableMaterial(m) {
-    return fixedCoversExtras(m.projectId) ? 0 : materialAmount(m);
+    return (fixedCoversExtras(m.projectId) && !m.ata) ? 0 : materialAmount(m);
   }
 
   function billableTrip(t) {
-    return fixedCoversExtras(t.projectId) ? 0 : tripAmount(t);
+    return (fixedCoversExtras(t.projectId) && !t.ata) ? 0 : tripAmount(t);
   }
 
   /* Timpris for en tidspost: projektets pris, annars kundens, annars standard. */
@@ -532,7 +539,7 @@
     deleteMaterial: deleteMaterial, materialAmount: materialAmount,
     isFixed: isFixed, isFixedProject: isFixedProject, fixedCoversExtras: fixedCoversExtras,
     openFixedProjects: openFixedProjects, fixedPriceOf: fixedPriceOf,
-    entryAmount: entryAmount, billableEntry: billableEntry,
+    isAta: isAta, entryAmount: entryAmount, billableEntry: billableEntry,
     billableMaterial: billableMaterial, billableTrip: billableTrip,
     rateFor: rateFor, vatRateFor: vatRateFor, round2: round2,
     invoices: invoices, invoice: invoice, createInvoice: createInvoice, peekInvoiceNumber: peekInvoiceNumber,

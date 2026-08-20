@@ -279,14 +279,17 @@
   function billableRows(sel) {
     var time = sel.entries.reduce(function (s, e) { return s + S.billableEntry(e); }, 0);
     var hours = sel.entries.reduce(function (s, e) {
-      return s + (S.isFixed(e.projectId) ? 0 : Number(e.hours || 0));
+      return s + ((S.isFixed(e.projectId) && !e.ata) ? 0 : Number(e.hours || 0));
     }, 0);
     var mat = sel.materials.reduce(function (s, m) { return s + S.billableMaterial(m); }, 0);
     var trip = sel.trips.reduce(function (s, t) { return s + S.billableTrip(t); }, 0);
 
-    var covered = sel.entries.filter(function (e) { return S.isFixed(e.projectId); }).length
-      + sel.materials.filter(function (m) { return S.fixedCoversExtras(m.projectId); }).length
-      + sel.trips.filter(function (t) { return S.fixedCoversExtras(t.projectId); }).length;
+    var covered = sel.entries.filter(function (e) { return S.isFixed(e.projectId) && !e.ata; }).length
+      + sel.materials.filter(function (m) { return S.fixedCoversExtras(m.projectId) && !m.ata; }).length
+      + sel.trips.filter(function (t) { return S.fixedCoversExtras(t.projectId) && !t.ata; }).length;
+
+    var ata = sel.entries.concat(sel.materials).concat(sel.trips)
+      .filter(S.isAta).length;
 
     var html = '';
 
@@ -300,10 +303,14 @@
     }
     if (trip) {
       var km = sel.trips.reduce(function (s, t) {
-        return s + (S.fixedCoversExtras(t.projectId) ? 0 : Number(t.distance || 0));
+        return s + ((S.fixedCoversExtras(t.projectId) && !t.ata) ? 0 : Number(t.distance || 0));
       }, 0);
       html += '<div class="totals-row"><span class="muted">Körning · ' + U.distance(km)
         + '</span><span>' + U.money(trip) + '</span></div>';
+    }
+    if (ata) {
+      html += '<div class="totals-row"><span class="muted small">varav ' + ata
+        + ' ÄTA</span><span class="small muted">utöver fastpriset</span></div>';
     }
     if (covered) {
       html += '<div class="totals-row"><span class="muted small">' + covered
@@ -342,10 +349,10 @@
     };
 
     /* Det som redan tacks av ett fastpris far ingen egen rad - annars
-       dubbeldebiteras kunden. */
-    entries = entries.filter(function (e) { return !S.isFixed(e.projectId); });
-    materials = materials.filter(function (m) { return !S.fixedCoversExtras(m.projectId); });
-    trips = trips.filter(function (t) { return !S.fixedCoversExtras(t.projectId); });
+       dubbeldebiteras kunden. ATA ligger utanfor priset och foljer med. */
+    entries = entries.filter(function (e) { return e.ata || !S.isFixed(e.projectId); });
+    materials = materials.filter(function (m) { return m.ata || !S.fixedCoversExtras(m.projectId); });
+    trips = trips.filter(function (t) { return t.ata || !S.fixedCoversExtras(t.projectId); });
 
     if (mode === 'grouped') {
       var groups = {};
@@ -353,6 +360,7 @@
         var rate = S.rateFor(e.clientId, e.projectId);
         var p = e.projectId ? S.project(e.projectId) : null;
         var name = p ? p.name : 'Konsulttid';
+        if (S.isAta(e)) name = 'ÄTA – ' + name;
         var key = name + '|' + rate;
         if (!groups[key]) groups[key] = { description: name, qty: 0, rate: rate, from: e.date, to: e.date };
         groups[key].qty += Number(e.hours || 0);
@@ -376,6 +384,7 @@
         var p = e.projectId ? S.project(e.projectId) : null;
         var desc = e.comment || 'Arbetad tid';
         if (p) desc = p.name + ' – ' + desc;
+        if (S.isAta(e)) desc = 'ÄTA – ' + desc;
         lines.push({
           date: e.date,
           description: desc,
@@ -393,6 +402,7 @@
       var p = m.projectId ? S.project(m.projectId) : null;
       var desc = m.description;
       if (p) desc = p.name + ' – ' + desc;
+      if (S.isAta(m)) desc = 'ÄTA – ' + desc;
       if (mode === 'grouped') desc = desc + ' (' + m.date + ')';
       lines.push({
         date: m.date,
@@ -414,6 +424,7 @@
       if (where) base += ' (' + where + ')';
       if (mode === 'grouped') base += ' ' + t.date;
       if (p) base = p.name + ' – ' + base;
+      if (S.isAta(t)) base = 'ÄTA – ' + base;
 
       if (Number(t.distance) > 0 && Number(t.rate) > 0) {
         lines.push({
@@ -482,6 +493,11 @@
       vatRate: vatRate,
       hours: sumHours(entries),
       fixedTotal: S.round2(fixed.reduce(function (s, p) { return s + S.fixedPriceOf(p); }, 0)),
+      ataTotal: S.round2(
+        entries.filter(S.isAta).reduce(function (s, e) { return s + S.billableEntry(e); }, 0)
+        + materials.filter(S.isAta).reduce(function (s, m) { return s + S.billableMaterial(m); }, 0)
+        + trips.filter(S.isAta).reduce(function (s, t) { return s + S.billableTrip(t); }, 0)
+      ),
       materialTotal: S.round2(materials.reduce(function (s, m) { return s + S.billableMaterial(m); }, 0)),
       distance: S.round2(trips.reduce(function (s, t) { return s + Number(t.distance || 0); }, 0)),
       tripTotal: S.round2(trips.reduce(function (s, t) { return s + S.billableTrip(t); }, 0)),
@@ -525,6 +541,10 @@
       + (inv.fixedTotal
         ? '<div class="totals-row"><span class="muted">Fast pris</span><span>'
           + U.money(inv.fixedTotal) + '</span></div>'
+        : '')
+      + (inv.ataTotal
+        ? '<div class="totals-row"><span class="muted">ÄTA</span><span>'
+          + U.money(inv.ataTotal) + '</span></div>'
         : '')
       + '<div class="totals-row"><span class="muted">Timmar</span><span>' + U.hours(inv.hours) + '</span></div>'
       + (inv.materialTotal

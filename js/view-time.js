@@ -266,11 +266,17 @@
     return materialHTML(it.obj);
   }
 
+  function ataBadge(obj) {
+    return S.isAta(obj) ? '<span class="badge badge-ata">ÄTA</span>' : '';
+  }
+
   /* Poster pa ett fastprisjobb ar betalda i och med att jobbet fakturerats,
      aven om posten registrerades efterat. */
   function billedBadge(obj) {
     var p = obj.projectId ? S.project(obj.projectId) : null;
-    var invId = obj.invoiceId || (S.isFixedProject(p) ? p.invoiceId : null);
+    /* ÄTA ligger utanför det avtalade priset och blir alltså inte betald bara
+       för att fastprisjobbet fakturerats - den behöver en egen rad. */
+    var invId = obj.invoiceId || (S.isFixedProject(p) && !obj.ata ? p.invoiceId : null);
     if (!invId) return '<span class="badge badge-accent">Ofakturerad</span>';
     var inv = S.invoice(invId);
     return '<span class="badge badge-muted">Faktura ' + U.esc(inv ? inv.number : '?') + '</span>';
@@ -283,11 +289,12 @@
       + '<span class="item-amount">' + U.hours(e.hours) + '</span>'
       + '</div>'
       + '<div class="item-sub">'
-      + (S.isFixed(e.projectId)
+      + (S.isFixed(e.projectId) && !e.ata
         ? '<span class="badge badge-fixed">Ingår i fastpris</span>'
         : '<span>' + U.money(amountOf(e)) + '</span>'
           + '<span class="dot">•</span>'
           + '<span>' + U.money0(S.rateFor(e.clientId, e.projectId)) + '/h</span>')
+      + ataBadge(e)
       + billedBadge(e)
       + '</div>'
       + (e.comment ? '<div class="item-comment">' + U.esc(e.comment) + '</div>' : '')
@@ -302,12 +309,13 @@
       + '<span class="item-amount">' + U.esc(qty) + '</span>'
       + '</div>'
       + '<div class="item-sub">'
-      + (S.fixedCoversExtras(m.projectId)
+      + (S.fixedCoversExtras(m.projectId) && !m.ata
         ? '<span class="badge badge-fixed">Ingår i fastpris</span>'
         : '<span>' + U.money(S.materialAmount(m)) + '</span>'
           + '<span class="dot">•</span>'
           + '<span>' + U.money(m.unitPrice) + '/' + U.esc(m.unit || 'st') + '</span>')
       + '<span class="badge badge-material">Material</span>'
+      + ataBadge(m)
       + billedBadge(m)
       + '</div>'
       + '<div class="item-comment">' + U.esc(m.description) + '</div>'
@@ -322,7 +330,7 @@
 
   function tripHTML(t) {
     var parts = [];
-    if (S.fixedCoversExtras(t.projectId)) {
+    if (S.fixedCoversExtras(t.projectId) && !t.ata) {
       parts.push('<span class="badge badge-fixed">Ingår i fastpris</span>');
     } else {
       if (t.distance) {
@@ -343,6 +351,7 @@
       + '<div class="item-sub">'
       + parts.join('<span class="dot">•</span>')
       + '<span class="badge badge-trip">Körning</span>'
+      + ataBadge(t)
       + billedBadge(t)
       + '</div>'
       + (text ? '<div class="item-comment">' + U.esc(text) + '</div>' : '')
@@ -384,6 +393,30 @@
       + '<label for="f-project">Projekt</label>'
       + '<select id="f-project"' + disabled + '>'
       + U.options(projs, selectedProjectId || '', 'Inget projekt') + '</select></div>';
+  }
+
+  /* ÄTA-rutan har bara mening på ett fastprisjobb. Den ritas alltid men döljs
+     tills ett sådant projekt är valt. */
+  function ataFieldHTML(obj, disabled) {
+    return '<div id="f-ata-wrap" hidden>'
+      + '<label class="check"><input type="checkbox" id="f-ata"'
+      + (obj && obj.ata ? ' checked' : '') + disabled + '>'
+      + '<span>ÄTA — ingår inte i fastpriset</span></label>'
+      + '<p class="small muted" style="margin:-4px 0 12px">Ändrings- eller tilläggsarbete '
+      + 'utöver det avtalade. Debiteras som egen rad på fakturan.</p></div>';
+  }
+
+  function toggleAtaField(body) {
+    var wrap = body.querySelector('#f-ata-wrap');
+    if (!wrap) return;
+    var show = S.isFixed(selectedProjectId(body));
+    wrap.hidden = !show;
+    if (!show) body.querySelector('#f-ata').checked = false;
+  }
+
+  function ataChecked(body) {
+    var wrap = body.querySelector('#f-ata-wrap');
+    return !!(wrap && !wrap.hidden && body.querySelector('#f-ata').checked);
   }
 
   function lockedNotice(obj) {
@@ -440,6 +473,8 @@
       + '<textarea id="f-comment" placeholder="Vad gjorde du?"' + dis + '>'
       + U.esc(e ? e.comment : '') + '</textarea></div>';
 
+    html += ataFieldHTML(e, dis);
+
     html += '<div id="f-preview" class="totals small" style="margin-bottom:14px"></div>';
 
     if (!billed) {
@@ -452,16 +487,27 @@
       var hoursInput = body.querySelector('#f-hours');
 
       function updatePreview() {
+        toggleAtaField(body);
         var h = U.parseHours(hoursInput.value);
-        var rate = S.rateFor(body.querySelector('#f-client').value, selectedProjectId(body));
+        var pid = selectedProjectId(body);
+        var rate = S.rateFor(body.querySelector('#f-client').value, pid);
+        var amount = isFinite(h) ? h * rate : 0;
+        var covered = S.isFixed(pid) && !ataChecked(body);
+
         body.querySelector('#f-preview').innerHTML =
           '<div class="totals-row"><span class="muted">Timpris</span><span>' + U.money0(rate) + '/h</span></div>'
-          + '<div class="totals-row"><span class="muted">Belopp exkl. moms</span><span><b>'
-          + U.money(isFinite(h) ? h * rate : 0) + '</b></span></div>';
+          + (covered
+            ? '<div class="totals-row"><span class="muted">Fastpris</span><span>'
+              + 'ingen extra debitering</span></div>'
+            : '<div class="totals-row"><span class="muted">Belopp exkl. moms</span><span><b>'
+              + U.money(amount) + '</b></span></div>');
       }
 
       wireClientChange(body, updatePreview);
       hoursInput.addEventListener('input', updatePreview);
+      if (body.querySelector('#f-ata')) {
+        body.querySelector('#f-ata').addEventListener('change', updatePreview);
+      }
 
       body.addEventListener('click', function (ev) {
         var q = ev.target.closest('[data-quick]');
@@ -514,7 +560,8 @@
       clientId: clientId,
       projectId: selectedProjectId(body) || null,
       hours: S.round2(hours),
-      comment: body.querySelector('#f-comment').value.trim()
+      comment: body.querySelector('#f-comment').value.trim(),
+      ata: ataChecked(body)
     });
 
     U.closeSheet();
@@ -577,6 +624,8 @@
         + '</details>';
     }
 
+    html += ataFieldHTML(m, dis);
+
     html += '<div id="m-preview" class="totals small" style="margin:14px 0"></div>';
 
     if (!billed) {
@@ -595,10 +644,12 @@
       var markupEl = body.querySelector('#m-markup');
 
       function updatePreview() {
+        toggleAtaField(body);
         var qty = U.parseHours(qtyEl.value);
         var price = U.parseHours(priceEl.value);
         var amount = (isFinite(qty) ? qty : 0) * (isFinite(price) ? price : 0);
         var vat = S.vatRateFor(body.querySelector('#f-client').value);
+        var covered = S.fixedCoversExtras(selectedProjectId(body)) && !ataChecked(body);
         var margin = null;
 
         if (costEl) {
@@ -609,10 +660,13 @@
         }
 
         body.querySelector('#m-preview').innerHTML =
-          '<div class="totals-row"><span class="muted">Belopp exkl. moms</span><span><b>'
-          + U.money(amount) + '</b></span></div>'
-          + '<div class="totals-row"><span class="muted">Moms ' + vat + '%</span><span>'
-          + U.money(amount * vat / 100) + '</span></div>'
+          (covered
+            ? '<div class="totals-row"><span class="muted">Fastpris</span><span>'
+              + 'ingår i priset</span></div>'
+            : '<div class="totals-row"><span class="muted">Belopp exkl. moms</span><span><b>'
+              + U.money(amount) + '</b></span></div>'
+              + '<div class="totals-row"><span class="muted">Moms ' + vat + '%</span><span>'
+              + U.money(amount * vat / 100) + '</span></div>')
           + (margin !== null
             ? '<div class="totals-row"><span class="muted">Din marginal</span><span>'
               + U.money(margin) + '</span></div>'
@@ -632,6 +686,9 @@
       wireClientChange(body, updatePreview);
       qtyEl.addEventListener('input', updatePreview);
       priceEl.addEventListener('input', updatePreview);
+      if (body.querySelector('#f-ata')) {
+        body.querySelector('#f-ata').addEventListener('change', updatePreview);
+      }
       if (costEl) {
         costEl.addEventListener('input', recalcPrice);
         markupEl.addEventListener('input', recalcPrice);
@@ -683,7 +740,8 @@
       unit: body.querySelector('#m-unit').value.trim() || 'st',
       unitPrice: S.round2(price),
       cost: isFinite(cost) ? S.round2(cost) : '',
-      markup: isFinite(markup) ? markup : ''
+      markup: isFinite(markup) ? markup : '',
+      ata: ataChecked(body)
     });
 
     U.closeSheet();
@@ -743,6 +801,8 @@
       + '<input type="text" id="t-purpose" placeholder="t.ex. Takarbete"'
       + ' value="' + U.esc(t ? t.purpose : '') + '"' + dis + '></div>';
 
+    html += ataFieldHTML(t, dis);
+
     html += '<div id="t-preview" class="totals small" style="margin-bottom:14px"></div>';
 
     if (!billed) {
@@ -771,10 +831,18 @@
       }
 
       function updatePreview() {
+        toggleAtaField(body);
         var v = values();
         var mil = S.round2(v.distance * v.rate);
         var vat = S.vatRateFor(body.querySelector('#f-client').value);
         var sum = S.round2(mil + v.fee);
+
+        if (S.fixedCoversExtras(selectedProjectId(body)) && !ataChecked(body)) {
+          body.querySelector('#t-preview').innerHTML =
+            '<div class="totals-row"><span class="muted">' + U.distance(v.distance)
+            + '</span><span>ingår i fastpriset</span></div>';
+          return;
+        }
 
         body.querySelector('#t-preview').innerHTML =
           '<div class="totals-row"><span class="muted">' + U.distance(v.distance) + ' × '
@@ -792,6 +860,9 @@
       distEl.addEventListener('input', updatePreview);
       rateEl.addEventListener('input', updatePreview);
       feeEl.addEventListener('input', updatePreview);
+      if (body.querySelector('#f-ata')) {
+        body.querySelector('#f-ata').addEventListener('change', updatePreview);
+      }
 
       body.addEventListener('click', function (ev) {
         if (ev.target.closest('[data-double]')) {
@@ -855,7 +926,8 @@
       fee: S.round2(fee),
       from: body.querySelector('#t-from').value.trim(),
       to: body.querySelector('#t-to').value.trim(),
-      purpose: body.querySelector('#t-purpose').value.trim()
+      purpose: body.querySelector('#t-purpose').value.trim(),
+      ata: ataChecked(body)
     });
 
     U.closeSheet();

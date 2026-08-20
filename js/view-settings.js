@@ -110,7 +110,7 @@
      framkörningsavgift ger en extra rad, så att Antal × Á-pris = Belopp
      stämmer på varje enskild rad. */
   function csv() {
-    var rows = [['Datum', 'Typ', 'Kund', 'Projekt', 'Antal', 'Enhet', 'Á-pris',
+    var rows = [['Datum', 'Typ', 'ÄTA', 'Kund', 'Projekt', 'Antal', 'Enhet', 'Á-pris',
       'Belopp', 'Beskrivning', 'Från', 'Till', 'Inköpspris', 'Faktura']];
 
     function row(o, typ, qty, unit, rate, amount, text, from, to, cost) {
@@ -118,7 +118,7 @@
       var p = o.projectId ? S.project(o.projectId) : null;
       var inv = o.invoiceId ? S.invoice(o.invoiceId) : null;
       rows.push([
-        o.date, typ, c ? c.name : '', p ? p.name : '',
+        o.date, typ, S.isAta(o) ? 'Ja' : '', c ? c.name : '', p ? p.name : '',
         dec(qty), unit, dec(rate), dec(U.round2(amount)),
         text || '', from || '', to || '', dec(cost), inv ? inv.number : ''
       ]);

@@ -213,10 +213,19 @@
     var mats = S.materials(q);
     var trips = S.trips(q);
 
+    var notAta = function (o) { return !S.isAta(o); };
+
     var hours = entries.reduce(function (s, e) { return s + Number(e.hours || 0); }, 0);
     var timeValue = entries.reduce(function (s, e) { return s + S.entryAmount(e); }, 0);
     var matTotal = mats.reduce(function (s, m) { return s + S.materialAmount(m); }, 0);
     var tripTotal = trips.reduce(function (s, t) { return s + S.tripAmount(t); }, 0);
+
+    /* ÄTA ligger utanför det avtalade priset och ska räknas för sig. */
+    var ataHours = entries.filter(S.isAta)
+      .reduce(function (s, e) { return s + Number(e.hours || 0); }, 0);
+    var ataTotal = entries.filter(S.isAta).reduce(function (s, e) { return s + S.entryAmount(e); }, 0)
+      + mats.filter(S.isAta).reduce(function (s, m) { return s + S.materialAmount(m); }, 0)
+      + trips.filter(S.isAta).reduce(function (s, t) { return s + S.tripAmount(t); }, 0);
 
     if (!hours && !matTotal && !tripTotal && !S.isFixedProject(p)) return '';
 
@@ -241,8 +250,12 @@
     }
 
     var price = S.fixedPriceOf(p);
-    var extras = p.fixedIncludes ? matTotal + tripTotal : 0;
+    var extras = p.fixedIncludes
+      ? mats.filter(notAta).reduce(function (s, m) { return s + S.materialAmount(m); }, 0)
+        + trips.filter(notAta).reduce(function (s, t) { return s + S.tripAmount(t); }, 0)
+      : 0;
     var forWork = price - extras;
+    var fixedHours = hours - ataHours;
 
     rows += '<div class="totals-row"><span class="muted">Avtalat pris</span><span>'
       + U.money(price) + '</span></div>';
@@ -254,8 +267,14 @@
         + U.money(forWork) + '</span></div>';
     }
 
-    if (hours > 0) {
-      var effective = forWork / hours;
+    if (ataTotal) {
+      rows += '<div class="totals-row"><span class="muted">ÄTA utöver priset'
+        + (ataHours ? ' (' + U.hours(ataHours) + ')' : '') + '</span><span>'
+        + U.money(ataTotal) + '</span></div>';
+    }
+
+    if (fixedHours > 0) {
+      var effective = forWork / fixedHours;
       var normal = S.rateFor(p.clientId, null);
       rows += '<div class="totals-row grand"><span>Ditt timpris i praktiken</span><span>'
         + U.money(effective) + '/h</span></div>'

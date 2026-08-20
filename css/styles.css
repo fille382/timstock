@@ -374,6 +374,7 @@ input:focus, select:focus, textarea:focus {
 .badge-material { background: var(--warn-soft); color: var(--warn); }
 .badge-trip { background: var(--ok-soft); color: var(--ok); }
 .badge-fixed { background: var(--accent-soft); color: var(--accent); }
+.badge-ata { background: var(--warn-soft); color: var(--warn); border: 1px solid currentColor; }
 
 .ok-text { color: var(--ok); font-weight: 600; }
 .warn-text { color: var(--danger); font-weight: 600; }

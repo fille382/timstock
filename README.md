@@ -77,6 +77,28 @@ Jobbet faktureras en gång, som en rad. När det sker markeras projektets alla
 öppna poster som fakturerade så att de inte ligger kvar och skräpar. Tar du bort
 fakturan frigörs både jobbet och posterna igen.
 
+### ÄTA — ändrings- och tilläggsarbeten
+
+Det som tillkommer utöver det avtalade ska inte tas ur fastpriset. Kryssa i
+**ÄTA** på posten, så hamnar den utanför priset och debiteras som egen rad. Rutan
+visas bara när du valt ett fastprisjobb — på löpande räkning betyder den inget.
+
+Det fungerar för alla tre posttyperna:
+
+- **ÄTA på löpande** — registrera tiden som vanligt och kryssa i ÄTA.
+- **ÄTA till fast pris** — lägg en materialpost med antal 1 och det överenskomna
+  beloppet som á-pris, kryssad som ÄTA.
+- **Material och körning** för tilläggsarbetet — kryssa i ÄTA så följer de med
+  även på ett jobb där utläggen annars ingår.
+
+På fakturan får varje sådan rad prefixet `ÄTA –`, så att kunden ser vad som är
+det avtalade jobbet och vad som är tillägg. I projektets utfallsruta redovisas
+ÄTA separat, och timpriset räknas på fastpristimmarna — annars hade
+tilläggsarbeten fått det avtalade jobbet att se bättre ut än det var.
+
+En ÄTA som registreras **efter** att fastpriset fakturerats ligger kvar som
+ofakturerad och kan tas på nästa faktura.
+
 ## Filtrera och fakturera per projekt
 
 I **Tidrapporten** kan du filtrera på kund, och när en kund är vald dyker ett
@@ -132,7 +154,7 @@ byter telefon är den borta.
 Exportera regelbundet under **Inställningar → Säkerhetskopiering**:
 
 - **JSON** — fullständig kopia som kan importeras tillbaka.
-- **CSV** — tid, material och körjournal i en fil, för Excel eller bokföring.
+- **CSV** — tid, material och körjournal i en fil, med kolumner för projekt och ÄTA.
 
 ## Filer
 
