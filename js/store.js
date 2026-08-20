@@ -148,6 +148,7 @@
     } else {
       p.id = uid();
       p.archived = false;
+      p.invoiceId = null;
       data.projects.push(p);
     }
     save();
@@ -168,6 +169,39 @@
     data.projects = data.projects.filter(function (p) { return p.id !== id; });
     save();
     return true;
+  }
+
+  /* ---------- Fastpris ----------
+
+     Ett fastprisjobb ar ett projekt med ett avtalat pris. Timmarna registreras
+     som vanligt men styr inte fakturan - de finns for att man i efterhand ska
+     kunna se om jobbet gick ihop. Projektet faktureras en gang, och da foljer
+     alla dess oppna poster med som betalda. */
+
+  function isFixedProject(p) {
+    return !!p && p.fixedPrice !== '' && p.fixedPrice !== null
+      && p.fixedPrice !== undefined && Number(p.fixedPrice) > 0;
+  }
+
+  function isFixed(projectId) {
+    return isFixedProject(project(projectId));
+  }
+
+  /* Sant nar jobbet offererats inklusive material och resor. */
+  function fixedCoversExtras(projectId) {
+    var p = project(projectId);
+    return isFixedProject(p) && !!p.fixedIncludes;
+  }
+
+  /* Ofakturerade fastprisjobb hos en kund. */
+  function openFixedProjects(clientId) {
+    return projects(clientId, true).filter(function (p) {
+      return isFixedProject(p) && !p.invoiceId;
+    });
+  }
+
+  function fixedPriceOf(p) {
+    return isFixedProject(p) ? round2(Number(p.fixedPrice)) : 0;
   }
 
   /* ---------- Tidsposter ---------- */
@@ -336,6 +370,28 @@
     return round2(tripDistanceAmount(t) + Number(t.fee || 0));
   }
 
+  /* ---------- Belopp ----------
+
+     amount* = vad posten ar vard raknemassigt (anvands for uppfoljning).
+     billable* = vad den faktiskt far faktureras for. Pa ett fastprisjobb ar
+     arbetet inbakat i det avtalade priset och ger darfor noll. */
+
+  function entryAmount(e) {
+    return round2(Number(e.hours || 0) * rateFor(e.clientId, e.projectId));
+  }
+
+  function billableEntry(e) {
+    return isFixed(e.projectId) ? 0 : entryAmount(e);
+  }
+
+  function billableMaterial(m) {
+    return fixedCoversExtras(m.projectId) ? 0 : materialAmount(m);
+  }
+
+  function billableTrip(t) {
+    return fixedCoversExtras(t.projectId) ? 0 : tripAmount(t);
+  }
+
   /* Timpris for en tidspost: projektets pris, annars kundens, annars standard. */
   function rateFor(clientId, projectId) {
     var p = projectId ? project(projectId) : null;
@@ -389,6 +445,10 @@
       var t = trip(tid);
       if (t) t.invoiceId = inv.id;
     });
+    (inv.projectIds || []).forEach(function (pid) {
+      var p = project(pid);
+      if (p) p.invoiceId = inv.id;
+    });
     save();
     return inv;
   }
@@ -411,6 +471,9 @@
     });
     data.trips.forEach(function (t) {
       if (t.invoiceId === id) t.invoiceId = null;
+    });
+    data.projects.forEach(function (p) {
+      if (p.invoiceId === id) p.invoiceId = null;
     });
     data.invoices = data.invoices.filter(function (i) { return i.id !== id; });
     save();
@@ -467,6 +530,10 @@
     trips: trips, trip: trip, saveTrip: saveTrip, deleteTrip: deleteTrip,
     tripAmount: tripAmount, tripDistanceAmount: tripDistanceAmount,
     deleteMaterial: deleteMaterial, materialAmount: materialAmount,
+    isFixed: isFixed, isFixedProject: isFixedProject, fixedCoversExtras: fixedCoversExtras,
+    openFixedProjects: openFixedProjects, fixedPriceOf: fixedPriceOf,
+    entryAmount: entryAmount, billableEntry: billableEntry,
+    billableMaterial: billableMaterial, billableTrip: billableTrip,
     rateFor: rateFor, vatRateFor: vatRateFor, round2: round2,
     invoices: invoices, invoice: invoice, createInvoice: createInvoice, peekInvoiceNumber: peekInvoiceNumber,
     setInvoiceStatus: setInvoiceStatus, deleteInvoice: deleteInvoice,

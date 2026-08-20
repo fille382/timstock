@@ -7,14 +7,20 @@
   var showArchived = false;
 
   function unbilledFor(clientId) {
-    var list = S.entries({ clientId: clientId, status: 'unbilled' });
-    var mats = S.materials({ clientId: clientId, status: 'unbilled' });
+    var q = { clientId: clientId, status: 'unbilled' };
+    var list = S.entries(q);
+    var mats = S.materials(q);
+    var trips = S.trips(q);
+    var fixedJobs = S.openFixedProjects(clientId);
+
     return {
       hours: list.reduce(function (s, e) { return s + Number(e.hours || 0); }, 0),
-      amount: list.reduce(function (s, e) {
-        return s + Number(e.hours || 0) * S.rateFor(e.clientId, e.projectId);
-      }, 0) + mats.reduce(function (s, m) { return s + S.materialAmount(m); }, 0),
-      materialCount: mats.length
+      amount: list.reduce(function (s, e) { return s + S.billableEntry(e); }, 0)
+        + mats.reduce(function (s, m) { return s + S.billableMaterial(m); }, 0)
+        + trips.reduce(function (s, t) { return s + S.billableTrip(t); }, 0)
+        + fixedJobs.reduce(function (s, p) { return s + S.fixedPriceOf(p); }, 0),
+      materialCount: mats.length,
+      fixedCount: fixedJobs.length
     };
   }
 
@@ -55,7 +61,8 @@
       + (u.amount > 0
         ? '<span class="badge badge-accent">Ofakturerat ' + U.money0(u.amount)
           + (u.hours > 0 ? ' · ' + U.hours(u.hours) : '')
-          + (u.materialCount ? ' · ' + u.materialCount + ' material' : '') + '</span>'
+          + (u.materialCount ? ' · ' + u.materialCount + ' material' : '')
+          + (u.fixedCount ? ' · ' + u.fixedCount + ' fastpris' : '') + '</span>'
         : '<span>Inget ofakturerat</span>')
       + '</div>'
       + '</button>';
@@ -114,7 +121,7 @@
     if (c) {
       html += '<div class="section-title">Projekt</div>';
       html += projs.length
-        ? '<div class="list">' + projs.map(function (p) { return projectItem(p, s); }).join('') + '</div>'
+        ? '<div class="list">' + projs.map(projectItem).join('') + '</div>'
         : '<div class="empty small">Inga projekt. Projekt är valfritt — du kan rapportera tid direkt på kunden.</div>';
       html += '<button class="btn btn-block" data-new-project style="margin-top:10px">+ Nytt projekt</button>';
 
@@ -152,14 +159,25 @@
     });
   }
 
-  function projectItem(p, s) {
+  function projectItem(p) {
     var rate = (p.rate === '' || p.rate === null || p.rate === undefined)
       ? null : Number(p.rate);
+    var fixed = S.isFixedProject(p);
+    var inv = p.invoiceId ? S.invoice(p.invoiceId) : null;
+
     return '<button class="item" type="button" data-project="' + U.esc(p.id) + '">'
       + '<div class="item-top"><span class="item-title">' + U.esc(p.name)
       + (p.archived ? ' <span class="badge badge-muted">Arkiverad</span>' : '') + '</span>'
-      + '<span class="item-amount small">' + (rate === null ? 'Kundens pris' : U.money0(rate) + '/h') + '</span>'
-      + '</div></button>';
+      + '<span class="item-amount small">'
+      + (fixed ? U.money0(S.fixedPriceOf(p)) : (rate === null ? 'Kundens pris' : U.money0(rate) + '/h'))
+      + '</span></div>'
+      + (fixed
+        ? '<div class="item-sub"><span class="badge badge-fixed">Fast pris</span>'
+          + (p.fixedIncludes ? '<span>allt inkluderat</span>' : '<span>material och körning tillkommer</span>')
+          + (inv ? '<span class="badge badge-muted">Faktura ' + U.esc(inv.number) + '</span>' : '')
+          + '</div>'
+        : '')
+      + '</button>';
   }
 
   function saveClient(body, existing) {
@@ -187,6 +205,73 @@
 
   /* ---------- Projektformulär ---------- */
 
+  /* Utfall: vad jobbet dragit i tid och utlägg jämfört med vad det ger.
+     På ett fastprisjobb är det här hela poängen med att logga timmarna. */
+  function outcomeHTML(p) {
+    var q = { projectId: p.id };
+    var entries = S.entries(q);
+    var mats = S.materials(q);
+    var trips = S.trips(q);
+
+    var hours = entries.reduce(function (s, e) { return s + Number(e.hours || 0); }, 0);
+    var timeValue = entries.reduce(function (s, e) { return s + S.entryAmount(e); }, 0);
+    var matTotal = mats.reduce(function (s, m) { return s + S.materialAmount(m); }, 0);
+    var tripTotal = trips.reduce(function (s, t) { return s + S.tripAmount(t); }, 0);
+
+    if (!hours && !matTotal && !tripTotal && !S.isFixedProject(p)) return '';
+
+    var rows = '<div class="totals-row"><span class="muted">Nedlagd tid</span><span>'
+      + U.hours(hours) + '</span></div>';
+
+    if (matTotal) {
+      rows += '<div class="totals-row"><span class="muted">Material</span><span>'
+        + U.money(matTotal) + '</span></div>';
+    }
+    if (tripTotal) {
+      rows += '<div class="totals-row"><span class="muted">Körning</span><span>'
+        + U.money(tripTotal) + '</span></div>';
+    }
+
+    if (!S.isFixedProject(p)) {
+      rows += '<div class="totals-row"><span class="muted">Tiden värd</span><span>'
+        + U.money(timeValue) + '</span></div>'
+        + '<div class="totals-row grand"><span>Att fakturera</span><span>'
+        + U.money(timeValue + matTotal + tripTotal) + '</span></div>';
+      return '<div class="totals" style="margin-top:14px">' + rows + '</div>';
+    }
+
+    var price = S.fixedPriceOf(p);
+    var extras = p.fixedIncludes ? matTotal + tripTotal : 0;
+    var forWork = price - extras;
+
+    rows += '<div class="totals-row"><span class="muted">Avtalat pris</span><span>'
+      + U.money(price) + '</span></div>';
+
+    if (p.fixedIncludes && extras) {
+      rows += '<div class="totals-row"><span class="muted">− material och körning</span><span>'
+        + U.money(extras) + '</span></div>'
+        + '<div class="totals-row"><span class="muted">Kvar till arbetet</span><span>'
+        + U.money(forWork) + '</span></div>';
+    }
+
+    if (hours > 0) {
+      var effective = forWork / hours;
+      var normal = S.rateFor(p.clientId, null);
+      rows += '<div class="totals-row grand"><span>Ditt timpris i praktiken</span><span>'
+        + U.money(effective) + '/h</span></div>'
+        + '<div class="totals-row"><span class="small muted">Jämfört med ' + U.money0(normal)
+        + '/h på löpande räkning</span><span class="small '
+        + (effective >= normal ? 'ok-text' : 'warn-text') + '">'
+        + (effective >= normal ? '+' : '') + U.money(effective - normal) + '/h</span></div>';
+    } else {
+      rows += '<div class="totals-row grand"><span>Kvar till arbetet</span><span>'
+        + U.money(forWork) + '</span></div>';
+    }
+
+    return '<div class="totals" style="margin-top:14px">'
+      + '<div class="card-title" style="margin-bottom:8px">Utfall</div>' + rows + '</div>';
+  }
+
   function openProject(id, clientId) {
     var p = id ? S.project(id) : null;
     var c = S.client(clientId);
@@ -200,7 +285,32 @@
       + '" placeholder="' + U.esc(S.rateFor(clientId, null)) + ' (kundens pris)">'
       + '<p class="small muted" style="margin:6px 0 0">Lämna tomt för att använda kundens timpris.</p></div>';
 
-    html += '<button class="btn btn-primary btn-block" data-save-project>'
+    var billed = p && p.invoiceId;
+    var fixedDis = billed ? ' disabled' : '';
+
+    html += '<div class="section-title" style="margin-left:0">Fast pris</div>';
+
+    if (billed) {
+      var finv = S.invoice(p.invoiceId);
+      html += '<div class="card" style="background:var(--warn-soft);border-color:var(--warn)">'
+        + '<div class="small">Jobbet är fakturerat på <b>' + U.esc(finv ? finv.number : '?')
+        + '</b>. Priset kan inte ändras. Ta bort fakturan först om något blev fel.</div></div>';
+    }
+
+    html += '<div class="field"><label for="p-fixed">Avtalat pris (kr)</label>'
+      + '<input type="number" id="p-fixed" inputmode="decimal" step="1" min="0" value="'
+      + U.esc(p && p.fixedPrice ? p.fixedPrice : '') + '" placeholder="Tomt = löpande räkning"'
+      + fixedDis + '>'
+      + '<p class="small muted" style="margin:6px 0 0">Fylls det i faktureras jobbet till det här '
+      + 'beloppet. Timmarna registreras som vanligt men styr inte fakturan.</p></div>';
+
+    html += '<label class="check"><input type="checkbox" id="p-fixed-includes"'
+      + (p && p.fixedIncludes ? ' checked' : '') + fixedDis + '>'
+      + '<span>Material och körning ingår i priset</span></label>';
+
+    if (p) html += outcomeHTML(p);
+
+    html += '<button class="btn btn-primary btn-block" data-save-project style="margin-top:14px">'
       + (p ? 'Spara projekt' : 'Lägg till projekt') + '</button>';
 
     if (p) {
@@ -221,7 +331,9 @@
             id: p ? p.id : null,
             clientId: clientId,
             name: name,
-            rate: body.querySelector('#p-rate').value.trim()
+            rate: body.querySelector('#p-rate').value.trim(),
+            fixedPrice: body.querySelector('#p-fixed').value.trim(),
+            fixedIncludes: body.querySelector('#p-fixed-includes').checked
           });
           U.toast(p ? 'Projekt sparat' : 'Projekt tillagt');
           openClient(clientId);

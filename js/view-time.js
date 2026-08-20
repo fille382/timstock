@@ -70,10 +70,30 @@
     });
   }
 
+  /* Vad posten far faktureras for. Noll pa ett fastprisjobb - dar ar beloppet
+     redan inbakat i projektets avtalade pris. */
   function itemAmount(it) {
-    if (it.type === 'time') return amountOf(it.obj);
-    if (it.type === 'trip') return S.tripAmount(it.obj);
-    return S.materialAmount(it.obj);
+    if (it.type === 'time') return S.billableEntry(it.obj);
+    if (it.type === 'trip') return S.billableTrip(it.obj);
+    return S.billableMaterial(it.obj);
+  }
+
+  function inFixedPrice(it) {
+    if (it.type === 'time') return S.isFixed(it.obj.projectId);
+    return S.fixedCoversExtras(it.obj.projectId);
+  }
+
+  /* Fastprisjobb som syns i urvalet och annu inte fakturerats. */
+  function openFixedJobs(items) {
+    var seen = {};
+    var out = [];
+    items.forEach(function (it) {
+      var p = it.obj.projectId ? S.project(it.obj.projectId) : null;
+      if (!p || seen[p.id] || p.invoiceId || !S.isFixedProject(p)) return;
+      seen[p.id] = true;
+      out.push(p);
+    });
+    return out;
   }
 
   function sumBy(items, fn) {
@@ -102,6 +122,11 @@
     var tripAmount = sumBy(items, function (it) {
       return it.type === 'trip' ? itemAmount(it) : 0;
     });
+
+    var fixedJobs = openFixedJobs(items);
+    var fixedTotal = fixedJobs.reduce(function (s, p) { return s + S.fixedPriceOf(p); }, 0);
+    totalAmount += fixedTotal;
+    unbilledAmount += fixedTotal;
 
     var clients = S.clients();
     var html = '';
@@ -160,6 +185,10 @@
         + (tripAmount
           ? '<div class="totals-row"><span>Körning (' + U.distance(totalDistance) + ')</span><span>'
             + U.money(tripAmount) + '</span></div>'
+          : '')
+        + (fixedTotal
+          ? '<div class="totals-row"><span>Fastprisjobb (' + fixedJobs.length + ')</span><span>'
+            + U.money(fixedTotal) + '</span></div>'
           : '')
         + '<div class="totals-row"><span>Belopp exkl. moms</span><span>' + U.money(totalAmount) + '</span></div>'
         + '<div class="totals-row grand"><span>Varav ofakturerat</span><span>' + U.money(unbilledAmount) + '</span></div>'
@@ -237,9 +266,13 @@
     return materialHTML(it.obj);
   }
 
+  /* Poster pa ett fastprisjobb ar betalda i och med att jobbet fakturerats,
+     aven om posten registrerades efterat. */
   function billedBadge(obj) {
-    if (!obj.invoiceId) return '<span class="badge badge-accent">Ofakturerad</span>';
-    var inv = S.invoice(obj.invoiceId);
+    var p = obj.projectId ? S.project(obj.projectId) : null;
+    var invId = obj.invoiceId || (S.isFixedProject(p) ? p.invoiceId : null);
+    if (!invId) return '<span class="badge badge-accent">Ofakturerad</span>';
+    var inv = S.invoice(invId);
     return '<span class="badge badge-muted">Faktura ' + U.esc(inv ? inv.number : '?') + '</span>';
   }
 
@@ -250,9 +283,11 @@
       + '<span class="item-amount">' + U.hours(e.hours) + '</span>'
       + '</div>'
       + '<div class="item-sub">'
-      + '<span>' + U.money(amountOf(e)) + '</span>'
-      + '<span class="dot">•</span>'
-      + '<span>' + U.money0(S.rateFor(e.clientId, e.projectId)) + '/h</span>'
+      + (S.isFixed(e.projectId)
+        ? '<span class="badge badge-fixed">Ingår i fastpris</span>'
+        : '<span>' + U.money(amountOf(e)) + '</span>'
+          + '<span class="dot">•</span>'
+          + '<span>' + U.money0(S.rateFor(e.clientId, e.projectId)) + '/h</span>')
       + billedBadge(e)
       + '</div>'
       + (e.comment ? '<div class="item-comment">' + U.esc(e.comment) + '</div>' : '')
@@ -267,9 +302,11 @@
       + '<span class="item-amount">' + U.esc(qty) + '</span>'
       + '</div>'
       + '<div class="item-sub">'
-      + '<span>' + U.money(S.materialAmount(m)) + '</span>'
-      + '<span class="dot">•</span>'
-      + '<span>' + U.money(m.unitPrice) + '/' + U.esc(m.unit || 'st') + '</span>'
+      + (S.fixedCoversExtras(m.projectId)
+        ? '<span class="badge badge-fixed">Ingår i fastpris</span>'
+        : '<span>' + U.money(S.materialAmount(m)) + '</span>'
+          + '<span class="dot">•</span>'
+          + '<span>' + U.money(m.unitPrice) + '/' + U.esc(m.unit || 'st') + '</span>')
       + '<span class="badge badge-material">Material</span>'
       + billedBadge(m)
       + '</div>'
@@ -285,11 +322,15 @@
 
   function tripHTML(t) {
     var parts = [];
-    if (t.distance) {
-      parts.push('<span>' + U.distance(t.distance) + ' × ' + U.money0(t.rate) + '</span>');
-    }
-    if (t.fee) {
-      parts.push('<span>Framkörning ' + U.money0(t.fee) + '</span>');
+    if (S.fixedCoversExtras(t.projectId)) {
+      parts.push('<span class="badge badge-fixed">Ingår i fastpris</span>');
+    } else {
+      if (t.distance) {
+        parts.push('<span>' + U.distance(t.distance) + ' × ' + U.money0(t.rate) + '</span>');
+      }
+      if (t.fee) {
+        parts.push('<span>Framkörning ' + U.money0(t.fee) + '</span>');
+      }
     }
 
     var text = [route(t), t.purpose].filter(function (x) { return x; }).join(' · ');

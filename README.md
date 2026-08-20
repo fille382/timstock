@@ -49,7 +49,7 @@ hemskärmen så beter den sig som en vanlig app.
 
 Priset hämtas i den här ordningen, första träffen gäller:
 
-1. Projektets timpris
+1. Projektets timpris (om jobbet inte har fast pris)
 2. Kundens timpris
 3. Standardtimpriset under Inställningar
 
@@ -57,6 +57,25 @@ Momssatsen tas från kunden om den är ifylld, annars från Inställningar.
 
 När en faktura skapas kopieras rader, priser och adressuppgifter in i fakturan.
 Ändrar du timpriset senare påverkas alltså inte redan skapade fakturor.
+
+## Fastprisjobb
+
+Ett fastprisjobb är ett projekt med ett **avtalat pris**. Fyll i priset på
+projektet — lämnar du fältet tomt är jobbet på löpande räkning som vanligt.
+
+Timmarna registrerar du precis som annars, men de **styr inte fakturan**. De
+finns där för att du efteråt ska kunna se om jobbet gick ihop. I projektet visas
+en utfallsruta: nedlagd tid, avtalat pris, och vad du i praktiken fick betalt per
+timme jämfört med ditt vanliga timpris.
+
+Kryssrutan **Material och körning ingår i priset** avgör om utläggen bakas in
+eller läggs på fakturan som egna rader. Poster som täcks av fastpriset märks
+"Ingår i fastpris" i tidrapporten och ger noll kronor i summeringarna — så att du
+aldrig råkar debitera både priset och timmarna.
+
+Jobbet faktureras en gång, som en rad. När det sker markeras projektets alla
+öppna poster som fakturerade så att de inte ligger kvar och skräpar. Tar du bort
+fakturan frigörs både jobbet och posterna igen.
 
 ## Filtrera och fakturera per projekt
 

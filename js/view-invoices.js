@@ -20,11 +20,12 @@
     var unbilledMaterials = S.materials({ status: 'unbilled' });
     var unbilledTrips = S.trips({ status: 'unbilled' });
 
-    var unbilledAmount = unbilledEntries.reduce(function (s, e) {
-      return s + Number(e.hours || 0) * S.rateFor(e.clientId, e.projectId);
-    }, 0)
-      + unbilledMaterials.reduce(function (s, m) { return s + S.materialAmount(m); }, 0)
-      + unbilledTrips.reduce(function (s, t) { return s + S.tripAmount(t); }, 0);
+    var openFixed = S.openFixedProjects(null);
+
+    var unbilledAmount = unbilledEntries.reduce(function (s, e) { return s + S.billableEntry(e); }, 0)
+      + unbilledMaterials.reduce(function (s, m) { return s + S.billableMaterial(m); }, 0)
+      + unbilledTrips.reduce(function (s, t) { return s + S.billableTrip(t); }, 0)
+      + openFixed.reduce(function (s, p) { return s + S.fixedPriceOf(p); }, 0);
 
     var outstanding = list
       .filter(function (i) { return i.status !== 'betald'; })
@@ -41,7 +42,8 @@
       + '</div>';
 
     if (!list.length) {
-      var pending = unbilledEntries.length + unbilledMaterials.length + unbilledTrips.length;
+      var pending = unbilledEntries.length + unbilledMaterials.length
+        + unbilledTrips.length + openFixed.length;
       html += '<div class="empty">Inga fakturor ännu.<br>'
         + (pending
           ? 'Du har ' + pending + ' ofakturerade poster att fakturera.'
@@ -77,7 +79,8 @@
   function hasUnbilled(clientId) {
     return S.entries({ clientId: clientId, status: 'unbilled' }).length > 0
       || S.materials({ clientId: clientId, status: 'unbilled' }).length > 0
-      || S.trips({ clientId: clientId, status: 'unbilled' }).length > 0;
+      || S.trips({ clientId: clientId, status: 'unbilled' }).length > 0
+      || S.openFixedProjects(clientId).length > 0;
   }
 
   var NO_PROJECT = '__utan__'; // valet "Utan projekt" i projekturvalet
@@ -92,6 +95,9 @@
       if (o.projectId) used[o.projectId] = true;
       else loose = true;
     });
+
+    /* Ett ofakturerat fastprisjobb ska ga att valja aven om ingen tid loggats. */
+    S.openFixedProjects(clientId).forEach(function (p) { used[p.id] = true; });
 
     var projs = S.projects(clientId, true).filter(function (p) { return used[p.id]; });
 
@@ -171,22 +177,34 @@
         var pid = body.querySelector('#i-project').value;
         var keep = function (o) { return matchesProject(o, pid); };
 
-        return {
-          entries: S.entries(q).filter(keep),
-          materials: S.materials(q).filter(keep),
-          trips: S.trips(q).filter(keep)
-        };
+        var entries = S.entries(q).filter(keep);
+        var materials = S.materials(q).filter(keep);
+        var trips = S.trips(q).filter(keep);
+
+        /* Fastprisjobb kommer med nar de valts uttryckligen, eller - vid "allt
+           ofakturerat" - nar de har nagon oppen post i perioden. */
+        var touched = {};
+        entries.concat(materials).concat(trips).forEach(function (o) {
+          if (o.projectId) touched[o.projectId] = true;
+        });
+
+        var fixed = S.openFixedProjects(q.clientId).filter(function (p) {
+          if (pid === NO_PROJECT) return false;
+          if (pid) return p.id === pid;
+          return !!touched[p.id];
+        });
+
+        return { entries: entries, materials: materials, trips: trips, fixed: fixed };
       }
 
       function updatePreview() {
         var sel = selected();
         var clientId = body.querySelector('#i-client').value;
         var vatRate = S.vatRateFor(clientId);
-        var lines = buildLines(sel.entries, sel.materials, sel.trips, mode);
+        var lines = buildLines(sel.entries, sel.materials, sel.trips, sel.fixed, mode);
         var sums = totals(lines, vatRate);
-        var hours = sumHours(sel.entries);
         var box = body.querySelector('#i-preview');
-        var count = sel.entries.length + sel.materials.length + sel.trips.length;
+        var count = sel.entries.length + sel.materials.length + sel.trips.length + sel.fixed.length;
 
         if (!count) {
           box.innerHTML = '<div class="empty small">Inget ofakturerat i det här urvalet.</div>';
@@ -196,21 +214,12 @@
         body.querySelector('[data-create]').disabled = false;
 
         box.innerHTML = '<div class="totals">'
-          + '<div class="totals-row"><span class="muted">' + sel.entries.length + ' tidsposter</span><span>'
-          + U.hours(hours) + '</span></div>'
-          + (sel.materials.length
-            ? '<div class="totals-row"><span class="muted">' + sel.materials.length
-              + ' materialposter</span><span>'
-              + U.money(sel.materials.reduce(function (t, m) { return t + S.materialAmount(m); }, 0))
-              + '</span></div>'
-            : '')
-          + (sel.trips.length
-            ? '<div class="totals-row"><span class="muted">' + sel.trips.length + ' körningar ('
-              + U.distance(sel.trips.reduce(function (t, x) { return t + Number(x.distance || 0); }, 0))
-              + ')</span><span>'
-              + U.money(sel.trips.reduce(function (t, x) { return t + S.tripAmount(x); }, 0))
-              + '</span></div>'
-            : '')
+          + sel.fixed.map(function (p) {
+            return '<div class="totals-row"><span class="muted">' + U.esc(p.name)
+              + ' <span class="badge badge-fixed">Fast pris</span></span><span>'
+              + U.money(S.fixedPriceOf(p)) + '</span></div>';
+          }).join('')
+          + billableRows(sel)
           + '<div class="totals-row"><span class="muted">Summa exkl. moms ('
           + lines.length + ' rader)</span><span>' + U.money(sums.subtotal) + '</span></div>'
           + '<div class="totals-row"><span class="muted">Moms ' + vatRate + '%</span><span>'
@@ -245,7 +254,7 @@
         }
         if (ev.target.closest('[data-create]')) {
           var sel = selected();
-          create(body, sel.entries, sel.materials, sel.trips, mode);
+          create(body, sel, mode);
         }
       });
 
@@ -264,20 +273,79 @@
     });
   }
 
+  /* Forhandsvisningens mellanrader. Bara det som faktiskt laggs till fakturan
+     far ett belopp - poster som tacks av ett fastpris redovisas separat, sa
+     att raderna alltid summerar till totalen. */
+  function billableRows(sel) {
+    var time = sel.entries.reduce(function (s, e) { return s + S.billableEntry(e); }, 0);
+    var hours = sel.entries.reduce(function (s, e) {
+      return s + (S.isFixed(e.projectId) ? 0 : Number(e.hours || 0));
+    }, 0);
+    var mat = sel.materials.reduce(function (s, m) { return s + S.billableMaterial(m); }, 0);
+    var trip = sel.trips.reduce(function (s, t) { return s + S.billableTrip(t); }, 0);
+
+    var covered = sel.entries.filter(function (e) { return S.isFixed(e.projectId); }).length
+      + sel.materials.filter(function (m) { return S.fixedCoversExtras(m.projectId); }).length
+      + sel.trips.filter(function (t) { return S.fixedCoversExtras(t.projectId); }).length;
+
+    var html = '';
+
+    if (time) {
+      html += '<div class="totals-row"><span class="muted">Arbetad tid · ' + U.hours(hours)
+        + '</span><span>' + U.money(time) + '</span></div>';
+    }
+    if (mat) {
+      html += '<div class="totals-row"><span class="muted">Material</span><span>'
+        + U.money(mat) + '</span></div>';
+    }
+    if (trip) {
+      var km = sel.trips.reduce(function (s, t) {
+        return s + (S.fixedCoversExtras(t.projectId) ? 0 : Number(t.distance || 0));
+      }, 0);
+      html += '<div class="totals-row"><span class="muted">Körning · ' + U.distance(km)
+        + '</span><span>' + U.money(trip) + '</span></div>';
+    }
+    if (covered) {
+      html += '<div class="totals-row"><span class="muted small">' + covered
+        + ' poster ingår i fastpriset</span><span class="small muted">ingen extra debitering</span></div>';
+    }
+
+    return html;
+  }
+
   function sumHours(entries) {
     return S.round2(entries.reduce(function (s, e) { return s + Number(e.hours || 0); }, 0));
   }
 
   /* Bygger fakturarader ur tid, material och körningar. Raderna sparas på
      fakturan så att historiken inte ändras om timpriset justeras senare. */
-  function buildLines(entries, materials, trips, mode) {
+  function buildLines(entries, materials, trips, fixed, mode) {
     var lines = [];
+
+    /* Fastprisjobben forst - de ar rubriken pa fakturan. */
+    (fixed || []).forEach(function (p) {
+      lines.push({
+        date: '',
+        description: p.name + ' – fast pris enligt överenskommelse'
+          + (p.fixedIncludes ? ', inklusive material och resor' : ''),
+        qty: 1,
+        unit: 'st',
+        rate: S.fixedPriceOf(p),
+        amount: S.fixedPriceOf(p)
+      });
+    });
 
     /* Aldst forst, sa fakturan lases uppifran och ner i kronologisk ordning. */
     var byDate = function (a, b) {
       if (a.date !== b.date) return a.date < b.date ? -1 : 1;
       return (a.createdAt || '') < (b.createdAt || '') ? -1 : 1;
     };
+
+    /* Det som redan tacks av ett fastpris far ingen egen rad - annars
+       dubbeldebiteras kunden. */
+    entries = entries.filter(function (e) { return !S.isFixed(e.projectId); });
+    materials = materials.filter(function (m) { return !S.fixedCoversExtras(m.projectId); });
+    trips = trips.filter(function (t) { return !S.fixedCoversExtras(t.projectId); });
 
     if (mode === 'grouped') {
       var groups = {};
@@ -381,8 +449,10 @@
     return { subtotal: subtotal, vat: vat, total: S.round2(subtotal + vat) };
   }
 
-  function create(body, entries, materials, trips, mode) {
-    if (!entries.length && !materials.length && !trips.length) {
+  function create(body, sel, mode) {
+    var entries = sel.entries, materials = sel.materials, trips = sel.trips, fixed = sel.fixed;
+
+    if (!entries.length && !materials.length && !trips.length && !fixed.length) {
       U.toast('Inget valt', true);
       return;
     }
@@ -391,7 +461,7 @@
     var c = S.client(clientId);
     var comp = S.company();
     var vatRate = S.vatRateFor(clientId);
-    var lines = buildLines(entries, materials, trips, mode);
+    var lines = buildLines(entries, materials, trips, fixed, mode);
     var sums = totals(lines, vatRate);
 
     var inv = S.createInvoice({
@@ -406,13 +476,15 @@
       entryIds: entries.map(function (e) { return e.id; }),
       materialIds: materials.map(function (m) { return m.id; }),
       tripIds: trips.map(function (t) { return t.id; }),
+      projectIds: fixed.map(function (p) { return p.id; }),
       lines: lines,
       mode: mode,
       vatRate: vatRate,
       hours: sumHours(entries),
-      materialTotal: S.round2(materials.reduce(function (s, m) { return s + S.materialAmount(m); }, 0)),
+      fixedTotal: S.round2(fixed.reduce(function (s, p) { return s + S.fixedPriceOf(p); }, 0)),
+      materialTotal: S.round2(materials.reduce(function (s, m) { return s + S.billableMaterial(m); }, 0)),
       distance: S.round2(trips.reduce(function (s, t) { return s + Number(t.distance || 0); }, 0)),
-      tripTotal: S.round2(trips.reduce(function (s, t) { return s + S.tripAmount(t); }, 0)),
+      tripTotal: S.round2(trips.reduce(function (s, t) { return s + S.billableTrip(t); }, 0)),
       subtotal: sums.subtotal,
       vat: sums.vat,
       total: sums.total,
@@ -450,6 +522,10 @@
       + U.esc(inv.issueDate) + '</span></div>'
       + '<div class="totals-row"><span class="muted">Förfallodatum</span><span>'
       + U.esc(inv.dueDate || '–') + '</span></div>'
+      + (inv.fixedTotal
+        ? '<div class="totals-row"><span class="muted">Fast pris</span><span>'
+          + U.money(inv.fixedTotal) + '</span></div>'
+        : '')
       + '<div class="totals-row"><span class="muted">Timmar</span><span>' + U.hours(inv.hours) + '</span></div>'
       + (inv.materialTotal
         ? '<div class="totals-row"><span class="muted">Material</span><span>'
