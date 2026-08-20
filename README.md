@@ -174,14 +174,13 @@ Exportera regelbundet under **Inställningar → Säkerhetskopiering**:
 
 ## Tumstocken
 
-Headern har appmärket och en linjalskala längs underkanten, och strecken
-fortsätter ner genom sidan som bakgrund. Delningen är fast — 16 px per streck,
-vart femte kraftigare — så hur lång linjalen blir avgörs av skärmen, precis som
-när man viker ut en tumstock. Skalan i headern och strecken i bakgrunden ligger
-i samma takt och bildar en enda genomgående linjal.
+Headern har appmärket, och i bakgrunden svävar åtta små tumstockar som rör sig
+mycket långsamt. Positionerna är handplacerade i `BACKDROP` i `js/app.js` — inte
+slumpade — så att de ligger utspridda i stället för att klumpa ihop sig.
 
-Allt är dekor: `aria-hidden` på skalan, och bakgrunden släcks vid utskrift så
-att fakturan blir ren.
+Allt är dekor: lagret är `aria-hidden`, tar inga klick, och släcks vid utskrift
+så att fakturan blir ren. Rörelsen stängs av för den som valt reducerad
+animation i systeminställningarna.
 
 ## Skriva ut / spara som PDF
 

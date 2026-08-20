@@ -99,20 +99,29 @@
     });
   }
 
-  /* Tumstocksskalan i headern. Delningen ar fast (16 px, samma som bakgrundens
-     streck) - hur lang linjalen blir avgors av skarmen. Rent dekorativ. */
-  var RULER_PITCH = 16;
-  var rulerCount = 0;
+  /* Sma tumstockar som svavar i bakgrunden. Handplacerade i stallet for
+     slumpade, sa att de ligger utspridda och inte klumpar ihop sig.
+     x/y i procent, rot i grader, w i px, dur i sekunder. */
+  var BACKDROP = [
+    { x: 6, y: 8, w: 96, rot: -14, dur: 26, delay: 0 },
+    { x: 63, y: 17, w: 66, rot: 22, dur: 34, delay: -6 },
+    { x: 28, y: 33, w: 122, rot: 6, dur: 30, delay: -14 },
+    { x: 74, y: 46, w: 84, rot: -28, dur: 38, delay: -3 },
+    { x: 4, y: 58, w: 72, rot: 34, dur: 28, delay: -19 },
+    { x: 46, y: 70, w: 108, rot: -8, dur: 36, delay: -9 },
+    { x: 79, y: 84, w: 62, rot: 16, dur: 24, delay: -22 },
+    { x: 14, y: 90, w: 90, rot: -20, dur: 32, delay: -12 }
+  ];
 
-  function drawRuler() {
-    var el = document.getElementById('topbar-ruler');
-    var count = Math.ceil((global.innerWidth - 32) / RULER_PITCH);
-    if (count === rulerCount) return;
-    rulerCount = count;
-
-    var html = '';
-    for (var i = 1; i <= count; i++) html += '<span>' + i + '</span>';
-    el.innerHTML = html;
+  function drawBackdrop() {
+    var el = document.getElementById('backdrop');
+    el.innerHTML = BACKDROP.map(function (t) {
+      return '<svg viewBox="0 0 120 60" style="'
+        + '--x:' + t.x + '%;--y:' + t.y + '%;--w:' + t.w + 'px;'
+        + '--rot:' + t.rot + 'deg;--dur:' + t.dur + 's;--delay:' + t.delay + 's">'
+        + '<path d="M8 46 32 14 56 46 80 14 104 46" fill="none" stroke="currentColor"'
+        + ' stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    }).join('');
   }
 
   function init() {
@@ -124,7 +133,7 @@
     S.load();
     U.initSheet();
     hookBackButton();
-    drawRuler();
+    drawBackdrop();
 
     tabs.addEventListener('click', function (ev) {
       var b = ev.target.closest('.tab');
@@ -139,8 +148,6 @@
     });
 
     global.addEventListener('hashchange', function () { route(); });
-    global.addEventListener('resize', drawRuler);
-    global.addEventListener('orientationchange', drawRuler);
 
     global.App = { go: go, refresh: function () { route(true); } };
 

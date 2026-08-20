@@ -19,8 +19,7 @@
   --radius: 14px;
   --radius-sm: 10px;
   --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 4px 12px rgba(15, 23, 42, .05);
-  --rule: rgba(15, 23, 42, .045);
-  --rule-strong: rgba(15, 23, 42, .08);
+  --backdrop-ink: rgba(15, 23, 42, .055);
   --tap: 48px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
@@ -44,28 +43,23 @@
     --ok-soft: #10241d;
     --warn: #fbbf24;
     --warn-soft: #2a2210;
-    --rule: rgba(231, 236, 245, .04);
-    --rule-strong: rgba(231, 236, 245, .075);
+    --backdrop-ink: rgba(231, 236, 245, .06);
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3);
   }
 }
 
 * { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+/* Bakgrundsfärgen ligger på html så att tumstockarna kan placeras bakom
+   innehållet utan att målas över av body. */
+html {
+  -webkit-text-size-adjust: 100%;
+  background: var(--bg);
+}
 
-/* Tumstocksstrecken fortsätter ner genom sidan. Samma indelning som linjalen
-   i headern: 23 fält, vart femte streck kraftigare. Fäst mot vyn så att
-   linjerna står stilla när innehållet rullar. */
 body {
   margin: 0;
-  background-color: var(--bg);
-  background-image:
-    linear-gradient(to right, var(--rule-strong) 0 1px, transparent 1px),
-    linear-gradient(to right, var(--rule) 0 1px, transparent 1px);
-  background-size: 80px 100%, 16px 100%;
-  background-position: 80px 0, 16px 0;
-  background-attachment: fixed;
+  background: transparent;
   color: var(--text);
   font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -80,7 +74,7 @@ h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
   position: sticky;
   top: 0;
   z-index: 30;
-  padding: calc(var(--safe-t) + 10px) 0 0;
+  padding: calc(var(--safe-t) + 10px) 0 10px;
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: saturate(180%) blur(12px);
   border-bottom: 1px solid var(--border);
@@ -90,7 +84,7 @@ h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 16px 3px;
+  padding: 0 16px;
 }
 
 .topbar-mark { flex: 0 0 auto; border-radius: 7px; display: block; }
@@ -99,43 +93,35 @@ h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
 
 .topbar-actions { display: flex; gap: 8px; }
 
-/* Tumstocksskala längs nederkanten — samma indelning som bakgrundens streck,
-   så att headern blir toppen på en genomgående skala. Ren dekor. */
-.topbar-ruler {
-  display: flex;
-  height: 12px;
-  padding: 0 16px;
-  opacity: .5;
+/* ---------- Bakgrund: svävande tumstockar ---------- */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   overflow: hidden;
+  pointer-events: none;
+  color: var(--backdrop-ink);
 }
 
-/* Fast delning om 16 px — hur lång linjalen blir avgörs av skärmen,
-   precis som när man viker ut en tumstock. */
-.topbar-ruler span {
-  position: relative;
-  flex: 0 0 16px;
-  width: 16px;
-  padding: 0 0 5px 3px;
-  align-self: flex-end;
-  font-size: 7px;
-  line-height: 1;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Strecken går ned till headerns underkant, som mätkanten på en tumstock. */
-.topbar-ruler span::before {
-  content: '';
+.backdrop svg {
   position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 1px;
-  height: 4px;
-  background: var(--muted);
+  width: var(--w);
+  height: auto;
+  top: var(--y);
+  left: var(--x);
+  animation: drift var(--dur) var(--delay) ease-in-out infinite alternate;
+  will-change: transform;
 }
 
-/* Var femte streck är längre, precis som på en riktig. */
-.topbar-ruler span:nth-child(5n)::before { height: 9px; }
+@keyframes drift {
+  from { transform: rotate(var(--rot)) translateY(0); }
+  to { transform: rotate(calc(var(--rot) + 7deg)) translateY(-22px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop svg { animation: none; transform: rotate(var(--rot)); }
+}
 
 /* ---------- Layout ---------- */
 
@@ -741,7 +727,7 @@ input:focus, select:focus, textarea:focus {
 @media print {
   .no-print, .topbar, .bottomnav, main, .toast, .sheet { display: none !important; }
 
-  body { background: #fff; background-image: none; }
+  body { background: #fff; }
 
   #print-area { display: block !important; }
 
