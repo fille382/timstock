@@ -58,6 +58,21 @@ Momssatsen tas från kunden om den är ifylld, annars från Inställningar.
 När en faktura skapas kopieras rader, priser och adressuppgifter in i fakturan.
 Ändrar du timpriset senare påverkas alltså inte redan skapade fakturor.
 
+## Filtrera och fakturera per projekt
+
+I **Tidrapporten** kan du filtrera på kund, och när en kund är vald dyker ett
+projektfilter upp med kundens projekt plus valet **Utan projekt** för poster som
+inte hör till något. Har du bara en enda kund visas projektfiltret direkt —
+kunden är då underförstådd.
+
+Filtrerar du på ett projekt förifylls det i nästa post du registrerar, så du
+slipper välja om varje gång du jobbar en hel dag i samma projekt.
+
+Vid **Ny faktura** väljer du på samma sätt: allt ofakturerat hos kunden, ett
+enskilt projekt, eller bara det som saknar projekt. Listan visar bara projekt
+som faktiskt har något ofakturerat kvar. Resten ligger orört och kan faktureras
+separat senare.
+
 ## Material
 
 Material är utlägg som ska vidarefaktureras: antal, enhet och á-pris. Priset kan

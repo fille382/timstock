@@ -6,8 +6,24 @@
 
   var UNITS = ['st', 'm', 'm²', 'm³', 'kg', 'l', 'rulle', 'paket', 'säck', 'kartong', 'timme'];
 
-  var filter = { period: 'month', status: 'all', clientId: '' };
+  var NO_PROJECT = '__utan__'; // valet "Utan projekt" i projektfiltret
+
+  var filter = { period: 'month', status: 'all', clientId: '', projectId: '' };
   var container = null;
+
+  /* Vilken kund projektfiltret ska utga fran. Har man bara en enda kund
+     behovs inget kundfilter - da ar den kunden underforstadd. */
+  function filterClientId() {
+    if (filter.clientId) return filter.clientId;
+    var cs = S.clients();
+    return cs.length === 1 ? cs[0].id : '';
+  }
+
+  function matchesProject(obj) {
+    if (!filter.projectId) return true;
+    if (filter.projectId === NO_PROJECT) return !obj.projectId;
+    return obj.projectId === filter.projectId;
+  }
 
   function range() {
     if (filter.period === 'month') return U.monthRange(0);
@@ -45,6 +61,8 @@
     })).concat(S.trips(q).map(function (t) {
       return { type: 'trip', date: t.date, createdAt: t.createdAt || '', obj: t };
     }));
+
+    items = items.filter(function (it) { return matchesProject(it.obj); });
 
     return items.sort(function (a, b) {
       if (a.date !== b.date) return b.date < a.date ? -1 : 1;
@@ -128,6 +146,8 @@
         + U.options(clients, filter.clientId) + '</select></div>';
     }
 
+    html += projectFilterHTML();
+
     if (!items.length) {
       html += '<div class="empty">Inget registrerat i den här vyn.</div>';
     } else {
@@ -153,6 +173,24 @@
   function segBtn(group, value, text) {
     return '<button type="button" data-seg="' + group + '" data-value="' + value + '" aria-pressed="'
       + (filter[group] === value) + '">' + U.esc(text) + '</button>';
+  }
+
+  /* Projektfiltret visas bara nar det finns en kund att gora urvalet inom. */
+  function projectFilterHTML() {
+    var cid = filterClientId();
+    if (!cid) return '';
+
+    var projs = S.projects(cid, true).filter(function (p) {
+      return !p.archived || p.id === filter.projectId;
+    });
+    if (!projs.length) return '';
+
+    return '<div class="field"><select data-filter-project>'
+      + '<option value="">Alla projekt</option>'
+      + U.options(projs, filter.projectId)
+      + '<option value="' + NO_PROJECT + '"'
+      + (filter.projectId === NO_PROJECT ? ' selected' : '') + '>Utan projekt</option>'
+      + '</select></div>';
   }
 
   /* Grupperar posterna per datum med dagssumma i rubriken. */
@@ -290,6 +328,13 @@
     return newest ? newest.clientId : S.clients()[0].id;
   }
 
+  /* Filtrerar du på ett projekt är det rimligen det du håller på med. */
+  function defaultProjectId(clientId) {
+    if (!filter.projectId || filter.projectId === NO_PROJECT) return '';
+    var p = S.project(filter.projectId);
+    return p && p.clientId === clientId ? p.id : '';
+  }
+
   function clientFields(clientId, selectedProjectId, disabled) {
     var projs = S.projects(clientId);
     return '<div class="field"><label for="f-client">Kund</label>'
@@ -340,7 +385,7 @@
     html += '<div class="field"><label for="f-date">Datum</label>'
       + '<input type="date" id="f-date" value="' + U.esc(e ? e.date : S.todayISO()) + '"' + dis + '></div>';
 
-    html += clientFields(clientId, e ? e.projectId : '', dis);
+    html += clientFields(clientId, e ? e.projectId : defaultProjectId(clientId), dis);
 
     html += '<div class="field"><label for="f-hours">Timmar</label>'
       + '<input type="text" id="f-hours" inputmode="decimal" autocomplete="off" placeholder="t.ex. 7,5"'
@@ -453,7 +498,7 @@
     html += '<div class="field"><label for="f-date">Datum</label>'
       + '<input type="date" id="f-date" value="' + U.esc(m ? m.date : S.todayISO()) + '"' + dis + '></div>';
 
-    html += clientFields(clientId, m ? m.projectId : '', dis);
+    html += clientFields(clientId, m ? m.projectId : defaultProjectId(clientId), dis);
 
     html += '<div class="field"><label for="m-description">Vad köpte du? *</label>'
       + '<input type="text" id="m-description" placeholder="t.ex. Underlagspapp"'
@@ -624,7 +669,7 @@
     html += '<div class="field"><label for="f-date">Datum</label>'
       + '<input type="date" id="f-date" value="' + U.esc(t ? t.date : S.todayISO()) + '"' + dis + '></div>';
 
-    html += clientFields(clientId, t ? t.projectId : '', dis);
+    html += clientFields(clientId, t ? t.projectId : defaultProjectId(clientId), dis);
 
     html += '<div class="field"><label for="t-distance">Antal mil</label>'
       + '<input type="text" id="t-distance" inputmode="decimal" autocomplete="off" placeholder="t.ex. 4,5"'
@@ -789,6 +834,13 @@
       var cf = ev.target.closest('[data-filter-client]');
       if (cf) {
         filter.clientId = cf.value;
+        filter.projectId = ''; // projekten hor till kunden som just byttes
+        render(el);
+        return;
+      }
+      var pf = ev.target.closest('[data-filter-project]');
+      if (pf) {
+        filter.projectId = pf.value;
         render(el);
       }
     });

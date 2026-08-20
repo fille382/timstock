@@ -80,6 +80,35 @@
       || S.trips({ clientId: clientId, status: 'unbilled' }).length > 0;
   }
 
+  var NO_PROJECT = '__utan__'; // valet "Utan projekt" i projekturvalet
+
+  /* Projekt hos kunden som faktiskt har nagot ofakturerat kvar. */
+  function projectOptions(clientId, selectedId) {
+    var q = { clientId: clientId, status: 'unbilled' };
+    var used = {};
+    var loose = false;
+
+    S.entries(q).concat(S.materials(q)).concat(S.trips(q)).forEach(function (o) {
+      if (o.projectId) used[o.projectId] = true;
+      else loose = true;
+    });
+
+    var projs = S.projects(clientId, true).filter(function (p) { return used[p.id]; });
+
+    return '<option value="">Allt ofakturerat</option>'
+      + U.options(projs, selectedId)
+      + (loose
+        ? '<option value="' + NO_PROJECT + '"'
+          + (selectedId === NO_PROJECT ? ' selected' : '') + '>Utan projekt</option>'
+        : '');
+  }
+
+  function matchesProject(obj, projectId) {
+    if (!projectId) return true;
+    if (projectId === NO_PROJECT) return !obj.projectId;
+    return obj.projectId === projectId;
+  }
+
   function openNew() {
     var clients = S.clients(true).filter(function (c) { return hasUnbilled(c.id); });
 
@@ -93,6 +122,11 @@
 
     var html = '<div class="field"><label for="i-client">Kund</label>'
       + '<select id="i-client">' + U.options(clients, clients[0].id) + '</select></div>';
+
+    html += '<div class="field" id="i-project-wrap"><label for="i-project">Projekt</label>'
+      + '<select id="i-project">' + projectOptions(clients[0].id, '') + '</select>'
+      + '<p class="small muted" style="margin:6px 0 0">Fakturera ett enskilt projekt, eller allt '
+      + 'ofakturerat hos kunden.</p></div>';
 
     html += '<div class="field"><label>Period (ofakturerat t.o.m.)</label>'
       + '<div class="row">'
@@ -134,7 +168,14 @@
           to: body.querySelector('#i-to').value || null,
           status: 'unbilled'
         };
-        return { entries: S.entries(q), materials: S.materials(q), trips: S.trips(q) };
+        var pid = body.querySelector('#i-project').value;
+        var keep = function (o) { return matchesProject(o, pid); };
+
+        return {
+          entries: S.entries(q).filter(keep),
+          materials: S.materials(q).filter(keep),
+          trips: S.trips(q).filter(keep)
+        };
       }
 
       function updatePreview() {
@@ -148,7 +189,7 @@
         var count = sel.entries.length + sel.materials.length + sel.trips.length;
 
         if (!count) {
-          box.innerHTML = '<div class="empty small">Inget ofakturerat i vald period.</div>';
+          box.innerHTML = '<div class="empty small">Inget ofakturerat i det här urvalet.</div>';
           body.querySelector('[data-create]').disabled = true;
           return;
         }
@@ -206,6 +247,12 @@
           var sel = selected();
           create(body, sel.entries, sel.materials, sel.trips, mode);
         }
+      });
+
+      /* Byter man kund maste projektlistan byggas om innan urvalet räknas ut.
+         Den har lyssnaren ligger pa elementet sjalvt och hinner fore body:ns. */
+      body.querySelector('#i-client').addEventListener('change', function () {
+        body.querySelector('#i-project').innerHTML = projectOptions(this.value, '');
       });
 
       body.querySelector('#i-issue').addEventListener('change', function () {
