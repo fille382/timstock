@@ -99,6 +99,22 @@
     });
   }
 
+  /* Tumstocksskalan i headern. Delningen ar fast (16 px, samma som bakgrundens
+     streck) - hur lang linjalen blir avgors av skarmen. Rent dekorativ. */
+  var RULER_PITCH = 16;
+  var rulerCount = 0;
+
+  function drawRuler() {
+    var el = document.getElementById('topbar-ruler');
+    var count = Math.ceil((global.innerWidth - 32) / RULER_PITCH);
+    if (count === rulerCount) return;
+    rulerCount = count;
+
+    var html = '';
+    for (var i = 1; i <= count; i++) html += '<span>' + i + '</span>';
+    el.innerHTML = html;
+  }
+
   function init() {
     main = document.getElementById('main');
     tabs = document.getElementById('tabs');
@@ -108,6 +124,7 @@
     S.load();
     U.initSheet();
     hookBackButton();
+    drawRuler();
 
     tabs.addEventListener('click', function (ev) {
       var b = ev.target.closest('.tab');
@@ -122,6 +139,8 @@
     });
 
     global.addEventListener('hashchange', function () { route(); });
+    global.addEventListener('resize', drawRuler);
+    global.addEventListener('orientationchange', drawRuler);
 
     global.App = { go: go, refresh: function () { route(true); } };
 

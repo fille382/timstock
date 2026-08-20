@@ -172,6 +172,17 @@ Exportera regelbundet under **Inställningar → Säkerhetskopiering**:
 | `sw.js` | Service worker för offlineläge |
 | `serve.ps1` | Lokal testserver |
 
+## Tumstocken
+
+Headern har appmärket och en linjalskala längs underkanten, och strecken
+fortsätter ner genom sidan som bakgrund. Delningen är fast — 16 px per streck,
+vart femte kraftigare — så hur lång linjalen blir avgörs av skärmen, precis som
+när man viker ut en tumstock. Skalan i headern och strecken i bakgrunden ligger
+i samma takt och bildar en enda genomgående linjal.
+
+Allt är dekor: `aria-hidden` på skalan, och bakgrunden släcks vid utskrift så
+att fakturan blir ren.
+
 ## Skriva ut / spara som PDF
 
 Öppna fakturan och tryck **Skriv ut / PDF**. Bara fakturan följer med till
