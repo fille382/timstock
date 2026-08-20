@@ -1,0 +1,10 @@
+# Claude Code-lokal konfiguration
+.claude/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Loggar och tillfalliga filer
+*.log
+*.tmp
