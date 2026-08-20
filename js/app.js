@@ -12,8 +12,23 @@
     return Views[v] ? v : 'time';
   }
 
+  var closeSheetSilently = null; // satts av hookBackButton
+
   function go(view) {
-    if (U.isSheetOpen()) U.closeSheet();
+    if (U.isSheetOpen()) {
+      /* Stang formularet utan history.back(). Bakatsteget ar asynkront och
+         hinner annars ifatt hash-bytet och kastar tillbaka oss till samma vy.
+         Formularets historikpost skrivs i stallet over med malvyn. */
+      closeSheetSilently();
+      try {
+        global.history.replaceState(null, '', '#/' + view);
+      } catch (e) {
+        global.location.hash = '#/' + view;
+        return;
+      }
+      route(true);
+      return;
+    }
     global.location.hash = '#/' + view;
   }
 
@@ -67,6 +82,11 @@
         pushed = false;
         if (global.history.state && global.history.state.sheet) global.history.back();
       }
+    };
+
+    closeSheetSilently = function () {
+      closeBase();
+      pushed = false;
     };
 
     global.addEventListener('popstate', function () {

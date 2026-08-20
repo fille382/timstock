@@ -16,14 +16,20 @@
         defaultRate: 750,
         vatRate: 25,
         paymentTermsDays: 30,
+        materialMarkup: 0,
         invoicePrefix: '',
         nextInvoiceNumber: 1
       },
       clients: [],
       projects: [],
       entries: [],
+      materials: [],
       invoices: []
     };
+  }
+
+  function round2(n) {
+    return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
   }
 
   var data = defaults();
@@ -43,6 +49,7 @@
     d.clients = Array.isArray(raw.clients) ? raw.clients : [];
     d.projects = Array.isArray(raw.projects) ? raw.projects : [];
     d.entries = Array.isArray(raw.entries) ? raw.entries : [];
+    d.materials = Array.isArray(raw.materials) ? raw.materials : [];
     d.invoices = Array.isArray(raw.invoices) ? raw.invoices : [];
     return d;
   }
@@ -107,6 +114,7 @@
 
   function deleteClient(id) {
     if (data.entries.some(function (e) { return e.clientId === id; })) return false;
+    if (data.materials.some(function (m) { return m.clientId === id; })) return false;
     data.clients = data.clients.filter(function (c) { return c.id !== id; });
     data.projects = data.projects.filter(function (p) { return p.clientId !== id; });
     save();
@@ -150,6 +158,7 @@
 
   function deleteProject(id) {
     if (data.entries.some(function (e) { return e.projectId === id; })) return false;
+    if (data.materials.some(function (m) { return m.projectId === id; })) return false;
     data.projects = data.projects.filter(function (p) { return p.id !== id; });
     save();
     return true;
@@ -206,6 +215,63 @@
     return true;
   }
 
+  /* ---------- Material ---------- */
+
+  /* En materialpost ar ett utlagg som ska vidarefaktureras: antal, enhet och
+     a-pris. description ar texten som hamnar pa fakturaraden. */
+  function materials(filter) {
+    filter = filter || {};
+    return data.materials
+      .filter(function (m) {
+        if (filter.clientId && m.clientId !== filter.clientId) return false;
+        if (filter.projectId && m.projectId !== filter.projectId) return false;
+        if (filter.from && m.date < filter.from) return false;
+        if (filter.to && m.date > filter.to) return false;
+        if (filter.status === 'unbilled' && m.invoiceId) return false;
+        if (filter.status === 'billed' && !m.invoiceId) return false;
+        if (filter.invoiceId && m.invoiceId !== filter.invoiceId) return false;
+        if (filter.text) {
+          var needle = filter.text.toLowerCase();
+          if ((m.description || '').toLowerCase().indexOf(needle) === -1) return false;
+        }
+        return true;
+      })
+      .sort(function (a, b) {
+        if (a.date !== b.date) return b.date < a.date ? -1 : 1;
+        return (b.createdAt || '') < (a.createdAt || '') ? -1 : 1;
+      });
+  }
+
+  function material(id) {
+    return data.materials.find(function (m) { return m.id === id; }) || null;
+  }
+
+  function saveMaterial(m) {
+    if (m.id) {
+      var i = data.materials.findIndex(function (x) { return x.id === m.id; });
+      if (i >= 0) data.materials[i] = Object.assign({}, data.materials[i], m);
+    } else {
+      m.id = uid();
+      m.invoiceId = null;
+      m.createdAt = new Date().toISOString();
+      data.materials.push(m);
+    }
+    save();
+    return m.id;
+  }
+
+  function deleteMaterial(id) {
+    var m = material(id);
+    if (m && m.invoiceId) return false; // fakturerat material far inte forsvinna tyst
+    data.materials = data.materials.filter(function (x) { return x.id !== id; });
+    save();
+    return true;
+  }
+
+  function materialAmount(m) {
+    return round2(Number(m.qty || 0) * Number(m.unitPrice || 0));
+  }
+
   /* Timpris for en tidspost: projektets pris, annars kundens, annars standard. */
   function rateFor(clientId, projectId) {
     var p = projectId ? project(projectId) : null;
@@ -246,10 +312,14 @@
     inv.createdAt = new Date().toISOString();
     data.invoices.push(inv);
     data.settings.nextInvoiceNumber = Number(data.settings.nextInvoiceNumber) + 1;
-    // Mark tidsposterna som fakturerade
+    // Mark tidsposter och material som fakturerade
     (inv.entryIds || []).forEach(function (eid) {
       var e = entry(eid);
       if (e) e.invoiceId = inv.id;
+    });
+    (inv.materialIds || []).forEach(function (mid) {
+      var m = material(mid);
+      if (m) m.invoiceId = inv.id;
     });
     save();
     return inv;
@@ -263,10 +333,13 @@
     save();
   }
 
-  /* Tar bort fakturan och frigor tidsposterna sa de kan faktureras igen. */
+  /* Tar bort fakturan och frigor tidsposter och material sa de kan faktureras igen. */
   function deleteInvoice(id) {
     data.entries.forEach(function (e) {
       if (e.invoiceId === id) e.invoiceId = null;
+    });
+    data.materials.forEach(function (m) {
+      if (m.invoiceId === id) m.invoiceId = null;
     });
     data.invoices = data.invoices.filter(function (i) { return i.id !== id; });
     save();
@@ -319,7 +392,9 @@
     clients: clients, client: client, saveClient: saveClient, archiveClient: archiveClient, deleteClient: deleteClient,
     projects: projects, project: project, saveProject: saveProject, archiveProject: archiveProject, deleteProject: deleteProject,
     entries: entries, entry: entry, saveEntry: saveEntry, deleteEntry: deleteEntry,
-    rateFor: rateFor, vatRateFor: vatRateFor,
+    materials: materials, material: material, saveMaterial: saveMaterial,
+    deleteMaterial: deleteMaterial, materialAmount: materialAmount,
+    rateFor: rateFor, vatRateFor: vatRateFor, round2: round2,
     invoices: invoices, invoice: invoice, createInvoice: createInvoice, peekInvoiceNumber: peekInvoiceNumber,
     setInvoiceStatus: setInvoiceStatus, deleteInvoice: deleteInvoice,
     company: company, settings: settings, saveCompany: saveCompany, saveSettings: saveSettings,

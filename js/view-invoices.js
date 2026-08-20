@@ -16,10 +16,13 @@
   function render(el) {
     container = el;
     var list = S.invoices();
-    var unbilled = S.entries({ status: 'unbilled' });
-    var unbilledAmount = unbilled.reduce(function (s, e) {
+    var unbilledEntries = S.entries({ status: 'unbilled' });
+    var unbilledMaterials = S.materials({ status: 'unbilled' });
+
+    var unbilledAmount = unbilledEntries.reduce(function (s, e) {
       return s + Number(e.hours || 0) * S.rateFor(e.clientId, e.projectId);
-    }, 0);
+    }, 0) + unbilledMaterials.reduce(function (s, m) { return s + S.materialAmount(m); }, 0);
+
     var outstanding = list
       .filter(function (i) { return i.status !== 'betald'; })
       .reduce(function (s, i) { return s + Number(i.total || 0); }, 0);
@@ -35,10 +38,11 @@
       + '</div>';
 
     if (!list.length) {
+      var pending = unbilledEntries.length + unbilledMaterials.length;
       html += '<div class="empty">Inga fakturor ännu.<br>'
-        + (unbilled.length
-          ? 'Du har ' + unbilled.length + ' ofakturerade tidsposter att fakturera.'
-          : 'Registrera tid först, så kan du skapa en faktura.') + '</div>';
+        + (pending
+          ? 'Du har ' + pending + ' ofakturerade poster att fakturera.'
+          : 'Registrera tid eller material först, så kan du skapa en faktura.') + '</div>';
     } else {
       html += '<div class="list">' + list.map(invoiceItem).join('') + '</div>';
     }
@@ -52,7 +56,8 @@
     var overdue = inv.status !== 'betald' && inv.dueDate && inv.dueDate < S.todayISO();
     return '<button class="item" type="button" data-invoice="' + U.esc(inv.id) + '">'
       + '<div class="item-top">'
-      + '<span class="item-title">' + U.esc(inv.number) + ' · ' + U.esc(inv.clientSnapshot ? inv.clientSnapshot.name : '') + '</span>'
+      + '<span class="item-title">' + U.esc(inv.number) + ' · '
+      + U.esc(inv.clientSnapshot ? inv.clientSnapshot.name : '') + '</span>'
       + '<span class="item-amount">' + U.money0(inv.total) + '</span>'
       + '</div>'
       + '<div class="item-sub">'
@@ -66,13 +71,16 @@
 
   /* ---------- Ny faktura ---------- */
 
+  function hasUnbilled(clientId) {
+    return S.entries({ clientId: clientId, status: 'unbilled' }).length > 0
+      || S.materials({ clientId: clientId, status: 'unbilled' }).length > 0;
+  }
+
   function openNew() {
-    var clients = S.clients(true).filter(function (c) {
-      return S.entries({ clientId: c.id, status: 'unbilled' }).length > 0;
-    });
+    var clients = S.clients(true).filter(function (c) { return hasUnbilled(c.id); });
 
     if (!clients.length) {
-      U.toast('Ingen ofakturerad tid att fakturera', true);
+      U.toast('Inget ofakturerat att fakturera', true);
       return;
     }
 
@@ -82,7 +90,7 @@
     var html = '<div class="field"><label for="i-client">Kund</label>'
       + '<select id="i-client">' + U.options(clients, clients[0].id) + '</select></div>';
 
-    html += '<div class="field"><label>Period (ofakturerad tid t.o.m.)</label>'
+    html += '<div class="field"><label>Period (ofakturerat t.o.m.)</label>'
       + '<div class="row">'
       + '<input type="date" id="i-from" value="" aria-label="Från">'
       + '<input type="date" id="i-to" value="' + U.esc(today) + '" aria-label="Till">'
@@ -96,11 +104,13 @@
     html += '<div class="row"><div class="field"><label for="i-issue">Fakturadatum</label>'
       + '<input type="date" id="i-issue" value="' + U.esc(today) + '"></div>'
       + '<div class="field"><label for="i-due">Förfallodatum</label>'
-      + '<input type="date" id="i-due" value="' + U.esc(U.addDays(today, Number(s.paymentTermsDays) || 30)) + '"></div></div>';
+      + '<input type="date" id="i-due" value="'
+      + U.esc(U.addDays(today, Number(s.paymentTermsDays) || 30)) + '"></div></div>';
 
-    html += '<div class="field"><label>Specifikation</label>'
+    html += '<div class="field"><label>Specifikation av tiden</label>'
       + '<div class="seg"><button type="button" data-mode="detailed" aria-pressed="true">Varje tidspost</button>'
-      + '<button type="button" data-mode="grouped" aria-pressed="false">Summera per projekt</button></div></div>';
+      + '<button type="button" data-mode="grouped" aria-pressed="false">Summera per projekt</button></div>'
+      + '<p class="small muted" style="margin:8px 0 0">Material specificeras alltid rad för rad.</p></div>';
 
     html += '<div class="field"><label for="i-notes">Meddelande på fakturan</label>'
       + '<textarea id="i-notes" placeholder="T.ex. Tack för förtroendet!"></textarea></div>';
@@ -113,32 +123,45 @@
       var mode = 'detailed';
 
       function selected() {
-        var clientId = body.querySelector('#i-client').value;
-        var from = body.querySelector('#i-from').value;
-        var to = body.querySelector('#i-to').value;
-        return S.entries({ clientId: clientId, from: from || null, to: to || null, status: 'unbilled' });
+        var q = {
+          clientId: body.querySelector('#i-client').value,
+          from: body.querySelector('#i-from').value || null,
+          to: body.querySelector('#i-to').value || null,
+          status: 'unbilled'
+        };
+        return { entries: S.entries(q), materials: S.materials(q) };
       }
 
       function updatePreview() {
-        var list = selected();
+        var sel = selected();
         var clientId = body.querySelector('#i-client').value;
         var vatRate = S.vatRateFor(clientId);
-        var lines = buildLines(list, mode);
+        var lines = buildLines(sel.entries, sel.materials, mode);
         var sums = totals(lines, vatRate);
+        var hours = sumHours(sel.entries);
         var box = body.querySelector('#i-preview');
+        var count = sel.entries.length + sel.materials.length;
 
-        if (!list.length) {
-          box.innerHTML = '<div class="empty small">Ingen ofakturerad tid i vald period.</div>';
+        if (!count) {
+          box.innerHTML = '<div class="empty small">Inget ofakturerat i vald period.</div>';
           body.querySelector('[data-create]').disabled = true;
           return;
         }
         body.querySelector('[data-create]').disabled = false;
 
         box.innerHTML = '<div class="totals">'
-          + '<div class="totals-row"><span class="muted">' + list.length + ' tidsposter · '
-          + lines.length + ' fakturarader</span><span>' + U.hours(sums.hours) + '</span></div>'
-          + '<div class="totals-row"><span class="muted">Summa exkl. moms</span><span>' + U.money(sums.subtotal) + '</span></div>'
-          + '<div class="totals-row"><span class="muted">Moms ' + vatRate + '%</span><span>' + U.money(sums.vat) + '</span></div>'
+          + '<div class="totals-row"><span class="muted">' + sel.entries.length + ' tidsposter</span><span>'
+          + U.hours(hours) + '</span></div>'
+          + (sel.materials.length
+            ? '<div class="totals-row"><span class="muted">' + sel.materials.length
+              + ' materialposter</span><span>'
+              + U.money(sel.materials.reduce(function (t, m) { return t + S.materialAmount(m); }, 0))
+              + '</span></div>'
+            : '')
+          + '<div class="totals-row"><span class="muted">Summa exkl. moms ('
+          + lines.length + ' rader)</span><span>' + U.money(sums.subtotal) + '</span></div>'
+          + '<div class="totals-row"><span class="muted">Moms ' + vatRate + '%</span><span>'
+          + U.money(sums.vat) + '</span></div>'
           + '<div class="totals-row grand"><span>Att betala</span><span>' + U.money(sums.total) + '</span></div>'
           + '</div>';
       }
@@ -168,93 +191,122 @@
           return;
         }
         if (ev.target.closest('[data-create]')) {
-          create(body, selected(), mode);
+          var sel = selected();
+          create(body, sel.entries, sel.materials, mode);
         }
       });
 
       body.querySelector('#i-issue').addEventListener('change', function () {
-        body.querySelector('#i-due').value = U.addDays(this.value, Number(S.settings().paymentTermsDays) || 30);
+        body.querySelector('#i-due').value =
+          U.addDays(this.value, Number(S.settings().paymentTermsDays) || 30);
       });
 
       updatePreview();
     });
   }
 
-  /* Bygger fakturarader ur tidsposterna. Raderna sparas på fakturan så att
-     historiken inte ändras om timpriset justeras senare. */
-  function buildLines(entries, mode) {
-    var asc = entries.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  function sumHours(entries) {
+    return S.round2(entries.reduce(function (s, e) { return s + Number(e.hours || 0); }, 0));
+  }
+
+  /* Bygger fakturarader ur tidsposter och material. Raderna sparas på fakturan
+     så att historiken inte ändras om timpriset justeras senare. */
+  function buildLines(entries, materials, mode) {
+    var lines = [];
+    var byDate = function (a, b) { return a.date < b.date ? -1 : 1; };
 
     if (mode === 'grouped') {
       var groups = {};
-      asc.forEach(function (e) {
+      entries.slice().sort(byDate).forEach(function (e) {
         var rate = S.rateFor(e.clientId, e.projectId);
         var p = e.projectId ? S.project(e.projectId) : null;
         var name = p ? p.name : 'Konsulttid';
         var key = name + '|' + rate;
-        if (!groups[key]) groups[key] = { description: name, hours: 0, rate: rate, from: e.date, to: e.date };
-        groups[key].hours += Number(e.hours || 0);
+        if (!groups[key]) groups[key] = { description: name, qty: 0, rate: rate, from: e.date, to: e.date };
+        groups[key].qty += Number(e.hours || 0);
         if (e.date < groups[key].from) groups[key].from = e.date;
         if (e.date > groups[key].to) groups[key].to = e.date;
       });
-      return Object.keys(groups).map(function (k) {
+      Object.keys(groups).forEach(function (k) {
         var g = groups[k];
-        return {
+        lines.push({
           date: '',
           description: g.description + ' (' + g.from + ' – ' + g.to + ')',
-          hours: U.round2(g.hours),
+          qty: S.round2(g.qty),
+          unit: 'h',
           rate: g.rate,
-          amount: U.round2(g.hours * g.rate)
-        };
+          amount: S.round2(g.qty * g.rate)
+        });
+      });
+    } else {
+      entries.slice().sort(byDate).forEach(function (e) {
+        var rate = S.rateFor(e.clientId, e.projectId);
+        var p = e.projectId ? S.project(e.projectId) : null;
+        var desc = e.comment || 'Arbetad tid';
+        if (p) desc = p.name + ' – ' + desc;
+        lines.push({
+          date: e.date,
+          description: desc,
+          qty: Number(e.hours || 0),
+          unit: 'h',
+          rate: rate,
+          amount: S.round2(Number(e.hours || 0) * rate)
+        });
       });
     }
 
-    return asc.map(function (e) {
-      var rate = S.rateFor(e.clientId, e.projectId);
-      var p = e.projectId ? S.project(e.projectId) : null;
-      var desc = e.comment || 'Arbetad tid';
+    /* Material listas alltid rad för rad — varje inköp är sin egen post.
+       I grupperat läge saknas datumkolumnen, så datumet skrivs in i texten. */
+    materials.slice().sort(byDate).forEach(function (m) {
+      var p = m.projectId ? S.project(m.projectId) : null;
+      var desc = m.description;
       if (p) desc = p.name + ' – ' + desc;
-      return {
-        date: e.date,
+      if (mode === 'grouped') desc = desc + ' (' + m.date + ')';
+      lines.push({
+        date: m.date,
         description: desc,
-        hours: Number(e.hours || 0),
-        rate: rate,
-        amount: U.round2(Number(e.hours || 0) * rate)
-      };
+        qty: Number(m.qty || 0),
+        unit: m.unit || 'st',
+        rate: Number(m.unitPrice || 0),
+        amount: S.materialAmount(m)
+      });
     });
+
+    return lines;
   }
 
   function totals(lines, vatRate) {
-    var hours = lines.reduce(function (s, l) { return s + Number(l.hours || 0); }, 0);
-    var subtotal = U.round2(lines.reduce(function (s, l) { return s + Number(l.amount || 0); }, 0));
-    var vat = U.round2(subtotal * (Number(vatRate) || 0) / 100);
-    return { hours: U.round2(hours), subtotal: subtotal, vat: vat, total: U.round2(subtotal + vat) };
+    var subtotal = S.round2(lines.reduce(function (s, l) { return s + Number(l.amount || 0); }, 0));
+    var vat = S.round2(subtotal * (Number(vatRate) || 0) / 100);
+    return { subtotal: subtotal, vat: vat, total: S.round2(subtotal + vat) };
   }
 
-  function create(body, entries, mode) {
-    if (!entries.length) { U.toast('Ingen tid vald', true); return; }
+  function create(body, entries, materials, mode) {
+    if (!entries.length && !materials.length) { U.toast('Inget valt', true); return; }
 
     var clientId = body.querySelector('#i-client').value;
     var c = S.client(clientId);
     var comp = S.company();
     var vatRate = S.vatRateFor(clientId);
-    var lines = buildLines(entries, mode);
+    var lines = buildLines(entries, materials, mode);
     var sums = totals(lines, vatRate);
 
     var inv = S.createInvoice({
       clientId: clientId,
       clientSnapshot: {
-        name: c.name, contact: c.contact, orgnr: c.orgnr,
+        name: c.name, contact: c.contact, orgnr: c.orgnr, phone: c.phone,
         address: c.address, zip: c.zip, city: c.city, email: c.email
       },
       companySnapshot: JSON.parse(JSON.stringify(comp)),
       issueDate: body.querySelector('#i-issue').value || S.todayISO(),
       dueDate: body.querySelector('#i-due').value || '',
       entryIds: entries.map(function (e) { return e.id; }),
+      materialIds: materials.map(function (m) { return m.id; }),
       lines: lines,
       mode: mode,
       vatRate: vatRate,
-      hours: sums.hours,
+      hours: sumHours(entries),
+      materialTotal: S.round2(materials.reduce(function (s, m) { return s + S.materialAmount(m); }, 0)),
       subtotal: sums.subtotal,
       vat: sums.vat,
       total: sums.total,
@@ -286,11 +338,19 @@
       + '</div>';
 
     html += '<div class="totals">'
-      + '<div class="totals-row"><span class="muted">Status</span><span class="badge ' + st.cls + '">' + st.label + '</span></div>'
-      + '<div class="totals-row"><span class="muted">Fakturadatum</span><span>' + U.esc(inv.issueDate) + '</span></div>'
-      + '<div class="totals-row"><span class="muted">Förfallodatum</span><span>' + U.esc(inv.dueDate || '–') + '</span></div>'
+      + '<div class="totals-row"><span class="muted">Status</span><span class="badge ' + st.cls + '">'
+      + st.label + '</span></div>'
+      + '<div class="totals-row"><span class="muted">Fakturadatum</span><span>'
+      + U.esc(inv.issueDate) + '</span></div>'
+      + '<div class="totals-row"><span class="muted">Förfallodatum</span><span>'
+      + U.esc(inv.dueDate || '–') + '</span></div>'
       + '<div class="totals-row"><span class="muted">Timmar</span><span>' + U.hours(inv.hours) + '</span></div>'
-      + '<div class="totals-row"><span class="muted">Moms ' + U.esc(inv.vatRate) + '%</span><span>' + U.money(inv.vat) + '</span></div>'
+      + (inv.materialTotal
+        ? '<div class="totals-row"><span class="muted">Material</span><span>'
+          + U.money(inv.materialTotal) + '</span></div>'
+        : '')
+      + '<div class="totals-row"><span class="muted">Moms ' + U.esc(inv.vatRate) + '%</span><span>'
+      + U.money(inv.vat) + '</span></div>'
       + '<div class="totals-row grand"><span>Att betala</span><span>' + U.money(inv.total) + '</span></div>'
       + '</div>';
 
@@ -299,8 +359,8 @@
 
     html += '<div class="section-title">Hantera</div>';
     html += '<button class="btn btn-danger btn-block" data-delete-invoice>Ta bort faktura</button>';
-    html += '<p class="small muted" style="margin-top:8px">Tidsposterna blir ofakturerade igen och kan faktureras om. '
-      + 'Fakturanumret återanvänds inte.</p>';
+    html += '<p class="small muted" style="margin-top:8px">Tidsposter och material blir ofakturerade '
+      + 'igen och kan faktureras om. Fakturanumret återanvänds inte.</p>';
 
     U.openSheet('Faktura ' + inv.number, html, function (body) {
       body.addEventListener('click', function (ev) {
@@ -315,7 +375,7 @@
           return;
         }
         if (ev.target.closest('[data-delete-invoice]')) {
-          if (!confirm('Ta bort faktura ' + inv.number + '? Tidsposterna blir ofakturerade igen.')) return;
+          if (!confirm('Ta bort faktura ' + inv.number + '? Posterna blir ofakturerade igen.')) return;
           S.deleteInvoice(inv.id);
           U.closeSheet();
           U.toast('Faktura borttagen');
@@ -338,10 +398,13 @@
     var detailed = inv.mode !== 'grouped';
 
     var rows = (inv.lines || []).map(function (l) {
+      // Aldre fakturor sparade bara "hours" utan enhet
+      var qty = l.qty !== undefined ? l.qty : l.hours;
+      var unit = l.unit || 'h';
       return '<tr>'
         + (detailed ? '<td class="nowrap">' + U.esc(l.date) + '</td>' : '')
         + '<td class="desc">' + U.esc(l.description) + '</td>'
-        + '<td class="num">' + U.esc(String(l.hours).replace('.', ',')) + '</td>'
+        + '<td class="num">' + U.esc(String(qty).replace('.', ',') + ' ' + unit) + '</td>'
         + '<td class="num">' + U.money(l.rate) + '</td>'
         + '<td class="num">' + U.money(l.amount) + '</td>'
         + '</tr>';
@@ -373,12 +436,13 @@
 
     html += '<div class="inv-table-wrap"><table class="inv-table"><thead><tr>'
       + (detailed ? '<th>Datum</th>' : '')
-      + '<th>Beskrivning</th><th class="num">Tim</th><th class="num">á pris</th><th class="num">Belopp</th>'
+      + '<th>Beskrivning</th><th class="num">Antal</th><th class="num">á pris</th><th class="num">Belopp</th>'
       + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 
     html += '<div class="inv-sum">'
       + '<div class="inv-sum-row"><span>Summa exkl. moms</span><span>' + U.money(inv.subtotal) + '</span></div>'
-      + '<div class="inv-sum-row"><span>Moms ' + U.esc(inv.vatRate) + '%</span><span>' + U.money(inv.vat) + '</span></div>'
+      + '<div class="inv-sum-row"><span>Moms ' + U.esc(inv.vatRate) + '%</span><span>'
+      + U.money(inv.vat) + '</span></div>'
       + '<div class="inv-sum-row total"><span>Att betala</span><span>' + U.money(inv.total) + '</span></div>'
       + '</div>';
 

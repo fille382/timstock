@@ -8,11 +8,13 @@
 
   function unbilledFor(clientId) {
     var list = S.entries({ clientId: clientId, status: 'unbilled' });
+    var mats = S.materials({ clientId: clientId, status: 'unbilled' });
     return {
       hours: list.reduce(function (s, e) { return s + Number(e.hours || 0); }, 0),
       amount: list.reduce(function (s, e) {
         return s + Number(e.hours || 0) * S.rateFor(e.clientId, e.projectId);
-      }, 0)
+      }, 0) + mats.reduce(function (s, m) { return s + S.materialAmount(m); }, 0),
+      materialCount: mats.length
     };
   }
 
@@ -48,9 +50,12 @@
       + '<span class="item-amount">' + U.money0(S.rateFor(c.id, null)) + '/h</span>'
       + '</div>'
       + '<div class="item-sub">'
+      + (c.phone ? '<span>' + U.esc(c.phone) + '</span><span class="dot">•</span>' : '')
       + (projs.length ? '<span>' + projs.length + ' projekt</span><span class="dot">•</span>' : '')
-      + (u.hours > 0
-        ? '<span class="badge badge-accent">' + U.hours(u.hours) + ' ofakturerat · ' + U.money0(u.amount) + '</span>'
+      + (u.amount > 0
+        ? '<span class="badge badge-accent">Ofakturerat ' + U.money0(u.amount)
+          + (u.hours > 0 ? ' · ' + U.hours(u.hours) : '')
+          + (u.materialCount ? ' · ' + u.materialCount + ' material' : '') + '</span>'
         : '<span>Inget ofakturerat</span>')
       + '</div>'
       + '</button>';
@@ -68,8 +73,17 @@
     html += '<div class="field"><label for="c-name">Kundnamn *</label>'
       + '<input type="text" id="c-name" value="' + U.esc(c ? c.name : '') + '" placeholder="Företagets namn"></div>';
 
+    if (c && c.phone) {
+      html += '<a class="btn btn-block" href="tel:' + U.esc(String(c.phone).replace(/\s/g, ''))
+        + '" style="margin-bottom:14px">Ring ' + U.esc(c.contact || c.name) + '</a>';
+    }
+
     html += '<div class="field"><label for="c-contact">Kontaktperson</label>'
       + '<input type="text" id="c-contact" value="' + U.esc(c ? c.contact : '') + '"></div>';
+
+    html += '<div class="field"><label for="c-phone">Telefon</label>'
+      + '<input type="tel" id="c-phone" inputmode="tel" autocomplete="tel" value="'
+      + U.esc(c ? c.phone : '') + '"></div>';
 
     html += '<div class="row"><div class="field"><label for="c-rate">Timpris (kr)</label>'
       + '<input type="number" id="c-rate" inputmode="decimal" step="1" min="0" value="'
@@ -156,6 +170,7 @@
       id: existing ? existing.id : null,
       name: name,
       contact: body.querySelector('#c-contact').value.trim(),
+      phone: body.querySelector('#c-phone').value.trim(),
       rate: body.querySelector('#c-rate').value.trim(),
       vatRate: body.querySelector('#c-vat').value.trim(),
       orgnr: body.querySelector('#c-orgnr').value.trim(),

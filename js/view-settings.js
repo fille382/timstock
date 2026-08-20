@@ -40,8 +40,14 @@
       + '<div class="field"><label for="s-vat">Moms (%)</label>'
       + '<input type="number" id="s-vat" inputmode="decimal" step="1" min="0" max="100" value="' + U.esc(s.vatRate) + '"></div>'
       + '</div>'
+      + '<div class="row">'
       + '<div class="field"><label for="s-terms">Betalningsvillkor (dagar)</label>'
       + '<input type="number" id="s-terms" inputmode="numeric" step="1" min="0" value="' + U.esc(s.paymentTermsDays) + '"></div>'
+      + '<div class="field"><label for="s-markup">Påslag material (%)</label>'
+      + '<input type="number" id="s-markup" inputmode="decimal" step="1" min="0" value="' + U.esc(s.materialMarkup) + '"></div>'
+      + '</div>'
+      + '<p class="small muted" style="margin:-6px 0 12px">Påslaget förifylls när du räknar fram '
+      + 'á-priset från ett inköpspris.</p>'
       + '<div class="row">'
       + '<div class="field"><label for="s-prefix">Fakturanr-prefix</label>'
       + '<input type="text" id="s-prefix" value="' + U.esc(s.invoicePrefix) + '" placeholder="t.ex. 2026-"></div>'
@@ -59,10 +65,11 @@
       + '<div class="totals-row"><span class="muted">Kunder</span><span>' + d.clients.length + '</span></div>'
       + '<div class="totals-row"><span class="muted">Projekt</span><span>' + d.projects.length + '</span></div>'
       + '<div class="totals-row"><span class="muted">Tidsposter</span><span>' + d.entries.length + '</span></div>'
+      + '<div class="totals-row"><span class="muted">Materialposter</span><span>' + d.materials.length + '</span></div>'
       + '<div class="totals-row"><span class="muted">Fakturor</span><span>' + d.invoices.length + '</span></div>'
       + '</div>'
       + '<button class="btn btn-block" data-export>Exportera säkerhetskopia (JSON)</button>'
-      + '<button class="btn btn-block" data-export-csv style="margin-top:10px">Exportera tidsposter (CSV)</button>'
+      + '<button class="btn btn-block" data-export-csv style="margin-top:10px">Exportera tid &amp; material (CSV)</button>'
       + '<label class="btn btn-block" style="margin-top:10px">Importera säkerhetskopia'
       + '<input type="file" id="s-import" accept="application/json,.json" hidden></label>'
       + '</div>';
@@ -82,24 +89,39 @@
       + (type === 'email' ? ' autocapitalize="off"' : '') + '></div>';
   }
 
+  /* Tid och material i samma fil, atskilda av kolumnen Typ. */
   function csv() {
-    var rows = [['Datum', 'Kund', 'Projekt', 'Timmar', 'Timpris', 'Belopp', 'Kommentar', 'Faktura']];
-    S.entries().slice().reverse().forEach(function (e) {
-      var c = S.client(e.clientId);
-      var p = e.projectId ? S.project(e.projectId) : null;
-      var rate = S.rateFor(e.clientId, e.projectId);
-      var inv = e.invoiceId ? S.invoice(e.invoiceId) : null;
+    var rows = [['Datum', 'Typ', 'Kund', 'Projekt', 'Antal', 'Enhet', 'Á-pris',
+      'Belopp', 'Beskrivning', 'Inköpspris', 'Faktura']];
+
+    var all = S.entries().map(function (e) { return { type: 'Tid', o: e }; })
+      .concat(S.materials().map(function (m) { return { type: 'Material', o: m }; }))
+      .sort(function (a, b) { return a.o.date < b.o.date ? -1 : (a.o.date > b.o.date ? 1 : 0); });
+
+    all.forEach(function (it) {
+      var o = it.o;
+      var c = S.client(o.clientId);
+      var p = o.projectId ? S.project(o.projectId) : null;
+      var inv = o.invoiceId ? S.invoice(o.invoiceId) : null;
+      var isTime = it.type === 'Tid';
+      var qty = isTime ? Number(o.hours || 0) : Number(o.qty || 0);
+      var rate = isTime ? S.rateFor(o.clientId, o.projectId) : Number(o.unitPrice || 0);
+
       rows.push([
-        e.date,
+        o.date,
+        it.type,
         c ? c.name : '',
         p ? p.name : '',
-        String(e.hours).replace('.', ','),
+        String(qty).replace('.', ','),
+        isTime ? 'h' : (o.unit || 'st'),
         String(rate).replace('.', ','),
-        String(U.round2(e.hours * rate)).replace('.', ','),
-        e.comment || '',
+        String(U.round2(qty * rate)).replace('.', ','),
+        (isTime ? o.comment : o.description) || '',
+        isTime ? '' : String(o.cost === '' || o.cost === undefined ? '' : o.cost).replace('.', ','),
         inv ? inv.number : ''
       ]);
     });
+
     return '﻿' + rows.map(function (r) {
       return r.map(function (cell) {
         return '"' + String(cell).replace(/"/g, '""') + '"';
@@ -129,6 +151,7 @@
           defaultRate: Number(val(el, '#s-rate')) || 0,
           vatRate: Number(val(el, '#s-vat')) || 0,
           paymentTermsDays: Number(val(el, '#s-terms')) || 0,
+          materialMarkup: Number(val(el, '#s-markup')) || 0,
           invoicePrefix: val(el, '#s-prefix'),
           nextInvoiceNumber: Math.max(1, Number(val(el, '#s-next')) || 1)
         });
@@ -144,7 +167,7 @@
       }
 
       if (ev.target.closest('[data-export-csv]')) {
-        U.download('tidsposter-' + S.todayISO() + '.csv', csv(), 'text/csv;charset=utf-8');
+        U.download('timstock-poster-' + S.todayISO() + '.csv', csv(), 'text/csv;charset=utf-8');
         U.toast('CSV exporterad');
         return;
       }

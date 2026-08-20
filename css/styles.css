@@ -371,6 +371,7 @@ input:focus, select:focus, textarea:focus {
 .badge-muted { background: var(--surface-2); color: var(--muted); }
 .badge-accent { background: var(--accent-soft); color: var(--accent); }
 .badge-danger { background: var(--danger-soft); color: var(--danger); }
+.badge-material { background: var(--warn-soft); color: var(--warn); }
 
 /* ---------- Summering ---------- */
 
@@ -399,20 +400,45 @@ input:focus, select:focus, textarea:focus {
   font-size: 1.05rem;
 }
 
-.stats { display: flex; gap: 10px; margin-bottom: 16px; }
+.stats { display: flex; gap: 8px; margin-bottom: 16px; }
 
 .stat {
   flex: 1;
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 12px;
+  padding: 11px 6px;
   text-align: center;
 }
 
-.stat-value { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.stat-label { font-size: .74rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
+.stat-value { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-label { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+
+/* Hopfällbar hjälpberäkning i materialformuläret */
+.calc {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 0 12px;
+  margin-bottom: 14px;
+}
+
+.calc > summary {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  list-style: none;
+}
+
+.calc > summary::-webkit-details-marker { display: none; }
+.calc > summary::before { content: '+'; margin-right: 8px; font-size: 1.1rem; }
+.calc[open] > summary::before { content: '−'; }
 
 /* ---------- Bottenmeny ---------- */
 
@@ -588,6 +614,11 @@ input:focus, select:focus, textarea:focus {
 
 @media (min-width: 768px) {
   main { padding: 24px 24px 40px; }
+
+  .stats { gap: 10px; }
+  .stat { padding: 12px; }
+  .stat-value { font-size: 1.35rem; }
+  .stat-label { font-size: .74rem; }
 
   .bottomnav {
     position: sticky;

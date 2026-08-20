@@ -3,8 +3,9 @@
 Timmar, kommentarer och fakturor — ute på fältet.
 
 Mobilanpassad app för att registrera arbetade timmar med en kommentar per
-inlägg, och göra fakturor av dem. Ren HTML/CSS/JS — inget bygge, inget ramverk,
-ingen server. All data ligger lokalt i webbläsaren (`localStorage`).
+inlägg, hålla reda på material du lagt ut för, och göra fakturor av alltihop.
+Ren HTML/CSS/JS — inget bygge, inget ramverk, ingen server. All data ligger
+lokalt i webbläsaren (`localStorage`).
 
 ## Kom igång
 
@@ -19,7 +20,7 @@ ingen server. All data ligger lokalt i webbläsaren (`localStorage`).
 2. Fyll i dina företagsuppgifter under **Inställningar** — de hamnar som
    avsändare på fakturorna.
 3. Lägg upp en kund under **Kunder & projekt** med timpris.
-4. Registrera tid under **Tidrapport**.
+4. Registrera tid och material under **Tidrapport**.
 5. Skapa faktura under **Fakturor**.
 
 ## Få upp appen på mobilen
@@ -57,6 +58,18 @@ Momssatsen tas från kunden om den är ifylld, annars från Inställningar.
 När en faktura skapas kopieras rader, priser och adressuppgifter in i fakturan.
 Ändrar du timpriset senare påverkas alltså inte redan skapade fakturor.
 
+## Material
+
+Material är utlägg som ska vidarefaktureras: antal, enhet och á-pris. Priset kan
+skrivas in direkt, eller räknas fram från inköpspris plus påslag — standard­påslaget
+sätts under Inställningar.
+
+**Inköpspriset syns aldrig på fakturan.** Det sparas bara så att du ser din
+marginal i formuläret och kan följa upp i CSV-exporten. Kunden ser á-priset.
+
+På fakturan specificeras material alltid rad för rad, även när tiden summeras per
+projekt — ett inköp är svårt att slå ihop begripligt med ett annat.
+
 ## Säkerhetskopiering
 
 Datan finns **bara i den webbläsare du använder**. Rensar du webbläsardata eller
@@ -65,7 +78,7 @@ byter telefon är den borta.
 Exportera regelbundet under **Inställningar → Säkerhetskopiering**:
 
 - **JSON** — fullständig kopia som kan importeras tillbaka.
-- **CSV** — alla tidsposter, för Excel eller bokföring.
+- **CSV** — all tid och allt material i en fil, för Excel eller bokföring.
 
 ## Filer
 
@@ -73,9 +86,9 @@ Exportera regelbundet under **Inställningar → Säkerhetskopiering**:
 | --- | --- |
 | `index.html` | Sidans stomme, flikar och bottenmeny |
 | `css/styles.css` | All formgivning, inklusive utskriftslayout |
-| `js/store.js` | Datalager: kunder, projekt, tidsposter, fakturor |
+| `js/store.js` | Datalager: kunder, projekt, tid, material, fakturor |
 | `js/ui.js` | Formatering, toast och formulärpanelen |
-| `js/view-time.js` | Tidrapporten |
+| `js/view-time.js` | Tidrapporten — tid och material |
 | `js/view-clients.js` | Kunder och projekt |
 | `js/view-invoices.js` | Fakturor, fakturamall och utskrift |
 | `js/view-settings.js` | Företagsuppgifter, standardvärden, backup |
