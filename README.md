@@ -174,9 +174,16 @@ Exportera regelbundet under **Inställningar → Säkerhetskopiering**:
 
 ## Tumstocken
 
-Headern har appmärket, och i bakgrunden svävar åtta små tumstockar som rör sig
-mycket långsamt. Positionerna är handplacerade i `BACKDROP` i `js/app.js` — inte
-slumpade — så att de ligger utspridda i stället för att klumpa ihop sig.
+Headern har appmärket, och i bakgrunden svävar sex små tumstockar som rör sig
+mycket långsamt. Position, storlek och vridning är handplacerade i `BACKDROP` i
+`js/app.js` — inte slumpade — så att de ligger utspridda i stället för att
+klumpa ihop sig.
+
+Varje tumstock har också en egen vikning: `segs` är antalet skänklar och
+`spread` hur öppen den är, från hårt hopvikt till nästan utfälld. Skänklarna
+måste vikas flackt — med spetsig vinkel och runda ändar blir formen fåglar i
+stället. Nitarna i lederna stansas ur i bakgrundsfärgen, och det är den detaljen
+som gör mest för igenkänningen.
 
 Allt är dekor: lagret är `aria-hidden`, tar inga klick, och släcks vid utskrift
 så att fakturan blir ren. Rörelsen stängs av för den som valt reducerad

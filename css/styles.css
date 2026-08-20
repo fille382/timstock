@@ -19,7 +19,7 @@
   --radius: 14px;
   --radius-sm: 10px;
   --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 4px 12px rgba(15, 23, 42, .05);
-  --backdrop-ink: rgba(15, 23, 42, .055);
+  --backdrop-ink: rgba(15, 23, 42, .038);
   --tap: 48px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
@@ -43,7 +43,7 @@
     --ok-soft: #10241d;
     --warn: #fbbf24;
     --warn-soft: #2a2210;
-    --backdrop-ink: rgba(231, 236, 245, .06);
+    --backdrop-ink: rgba(231, 236, 245, .035);
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3);
   }
 }

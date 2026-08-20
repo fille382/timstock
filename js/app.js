@@ -103,25 +103,55 @@
      slumpade, sa att de ligger utspridda och inte klumpar ihop sig.
      x/y i procent, rot i grader, w i px, dur i sekunder. */
   var BACKDROP = [
-    { x: 6, y: 8, w: 96, rot: -14, dur: 26, delay: 0 },
-    { x: 63, y: 17, w: 66, rot: 22, dur: 34, delay: -6 },
-    { x: 28, y: 33, w: 122, rot: 6, dur: 30, delay: -14 },
-    { x: 74, y: 46, w: 84, rot: -28, dur: 38, delay: -3 },
-    { x: 4, y: 58, w: 72, rot: 34, dur: 28, delay: -19 },
-    { x: 46, y: 70, w: 108, rot: -8, dur: 36, delay: -9 },
-    { x: 79, y: 84, w: 62, rot: 16, dur: 24, delay: -22 },
-    { x: 14, y: 90, w: 90, rot: -20, dur: 32, delay: -12 }
+    { x: 3, y: 9, w: 126, rot: -12, segs: 4, spread: 16, reach: 106, dur: 28, delay: 0 },
+    { x: 64, y: 23, w: 104, rot: 21, segs: 3, spread: 27, reach: 98, dur: 36, delay: -8 },
+    { x: 19, y: 41, w: 142, rot: 5, segs: 5, spread: 14, reach: 114, dur: 31, delay: -17 },
+    { x: 71, y: 59, w: 104, rot: -25, segs: 4, spread: 21, reach: 96, dur: 39, delay: -4 },
+    { x: 5, y: 73, w: 96, rot: 28, segs: 3, spread: 31, reach: 110, dur: 27, delay: -21 },
+    { x: 51, y: 88, w: 122, rot: -7, segs: 5, spread: 18, reach: 102, dur: 34, delay: -11 }
   ];
 
-  function drawBackdrop() {
-    var el = document.getElementById('backdrop');
-    el.innerHTML = BACKDROP.map(function (t) {
-      return '<svg viewBox="0 0 120 60" style="'
-        + '--x:' + t.x + '%;--y:' + t.y + '%;--w:' + t.w + 'px;'
-        + '--rot:' + t.rot + 'deg;--dur:' + t.dur + 's;--delay:' + t.delay + 's">'
-        + '<path d="M8 46 32 14 56 46 80 14 104 46" fill="none" stroke="currentColor"'
-        + ' stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var PAD = 18;
+  var BOX_H = 112;
+
+  /* Bygger en hopvikt tumstock. spread ar avstandet mellan skanklarna - litet
+     varde ger en hart hopvikt stock, stort en nastan utfalld. Skanklarna maste
+     ligga flackt; spetsiga vinklar och runda andar ger faglar i stallet. */
+  function fold(t) {
+    var y = (BOX_H - t.segs * t.spread) / 2;
+    var pts = [[PAD, y]];
+
+    for (var i = 1; i <= t.segs; i++) {
+      y += t.spread;
+      pts.push([(i % 2) ? PAD + t.reach : PAD, y]);
+    }
+
+    return pts;
+  }
+
+  function rulerSVG(t) {
+    var pts = fold(t);
+
+    var d = pts.map(function (p, i) {
+      return (i ? 'L' : 'M') + p[0] + ' ' + p[1];
+    }).join(' ');
+
+    /* Nitarna i bada andar och i varje led stansas ur i sidans bakgrundsfarg.
+       Det ar den detaljen som far formen att lasas som en tumstock. */
+    var rivets = pts.map(function (p) {
+      return '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="3.4"/>';
     }).join('');
+
+    return '<svg viewBox="0 0 ' + (t.reach + PAD * 2) + ' ' + BOX_H + '" style="'
+      + '--x:' + t.x + '%;--y:' + t.y + '%;--w:' + t.w + 'px;'
+      + '--rot:' + t.rot + 'deg;--dur:' + t.dur + 's;--delay:' + t.delay + 's">'
+      + '<path d="' + d + '" fill="none" stroke="currentColor" stroke-width="13"'
+      + ' stroke-linecap="round" stroke-linejoin="round"/>'
+      + '<g fill="var(--bg)">' + rivets + '</g></svg>';
+  }
+
+  function drawBackdrop() {
+    document.getElementById('backdrop').innerHTML = BACKDROP.map(rulerSVG).join('');
   }
 
   function init() {
