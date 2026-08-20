@@ -17,6 +17,8 @@
         vatRate: 25,
         paymentTermsDays: 30,
         materialMarkup: 0,
+        mileageRate: 25,
+        calloutFee: 0,
         invoicePrefix: '',
         nextInvoiceNumber: 1
       },
@@ -24,6 +26,7 @@
       projects: [],
       entries: [],
       materials: [],
+      trips: [],
       invoices: []
     };
   }
@@ -50,6 +53,7 @@
     d.projects = Array.isArray(raw.projects) ? raw.projects : [];
     d.entries = Array.isArray(raw.entries) ? raw.entries : [];
     d.materials = Array.isArray(raw.materials) ? raw.materials : [];
+    d.trips = Array.isArray(raw.trips) ? raw.trips : [];
     d.invoices = Array.isArray(raw.invoices) ? raw.invoices : [];
     return d;
   }
@@ -115,6 +119,7 @@
   function deleteClient(id) {
     if (data.entries.some(function (e) { return e.clientId === id; })) return false;
     if (data.materials.some(function (m) { return m.clientId === id; })) return false;
+    if (data.trips.some(function (t) { return t.clientId === id; })) return false;
     data.clients = data.clients.filter(function (c) { return c.id !== id; });
     data.projects = data.projects.filter(function (p) { return p.clientId !== id; });
     save();
@@ -159,6 +164,7 @@
   function deleteProject(id) {
     if (data.entries.some(function (e) { return e.projectId === id; })) return false;
     if (data.materials.some(function (m) { return m.projectId === id; })) return false;
+    if (data.trips.some(function (t) { return t.projectId === id; })) return false;
     data.projects = data.projects.filter(function (p) { return p.id !== id; });
     save();
     return true;
@@ -272,6 +278,64 @@
     return round2(Number(m.qty || 0) * Number(m.unitPrice || 0));
   }
 
+  /* ---------- Korningar ---------- */
+
+  /* En korning ar antal mil ganger milersattning, plus en valfri fast
+     framkorningsavgift. from/to/purpose ar korjournalsuppgifter. */
+  function trips(filter) {
+    filter = filter || {};
+    return data.trips
+      .filter(function (t) {
+        if (filter.clientId && t.clientId !== filter.clientId) return false;
+        if (filter.projectId && t.projectId !== filter.projectId) return false;
+        if (filter.from && t.date < filter.from) return false;
+        if (filter.to && t.date > filter.to) return false;
+        if (filter.status === 'unbilled' && t.invoiceId) return false;
+        if (filter.status === 'billed' && !t.invoiceId) return false;
+        if (filter.invoiceId && t.invoiceId !== filter.invoiceId) return false;
+        return true;
+      })
+      .sort(function (a, b) {
+        if (a.date !== b.date) return b.date < a.date ? -1 : 1;
+        return (b.createdAt || '') < (a.createdAt || '') ? -1 : 1;
+      });
+  }
+
+  function trip(id) {
+    return data.trips.find(function (t) { return t.id === id; }) || null;
+  }
+
+  function saveTrip(t) {
+    if (t.id) {
+      var i = data.trips.findIndex(function (x) { return x.id === t.id; });
+      if (i >= 0) data.trips[i] = Object.assign({}, data.trips[i], t);
+    } else {
+      t.id = uid();
+      t.invoiceId = null;
+      t.createdAt = new Date().toISOString();
+      data.trips.push(t);
+    }
+    save();
+    return t.id;
+  }
+
+  function deleteTrip(id) {
+    var t = trip(id);
+    if (t && t.invoiceId) return false; // fakturerad korning far inte forsvinna tyst
+    data.trips = data.trips.filter(function (x) { return x.id !== id; });
+    save();
+    return true;
+  }
+
+  /* Bara milen, utan framkorningsavgiften. */
+  function tripDistanceAmount(t) {
+    return round2(Number(t.distance || 0) * Number(t.rate || 0));
+  }
+
+  function tripAmount(t) {
+    return round2(tripDistanceAmount(t) + Number(t.fee || 0));
+  }
+
   /* Timpris for en tidspost: projektets pris, annars kundens, annars standard. */
   function rateFor(clientId, projectId) {
     var p = projectId ? project(projectId) : null;
@@ -321,6 +385,10 @@
       var m = material(mid);
       if (m) m.invoiceId = inv.id;
     });
+    (inv.tripIds || []).forEach(function (tid) {
+      var t = trip(tid);
+      if (t) t.invoiceId = inv.id;
+    });
     save();
     return inv;
   }
@@ -340,6 +408,9 @@
     });
     data.materials.forEach(function (m) {
       if (m.invoiceId === id) m.invoiceId = null;
+    });
+    data.trips.forEach(function (t) {
+      if (t.invoiceId === id) t.invoiceId = null;
     });
     data.invoices = data.invoices.filter(function (i) { return i.id !== id; });
     save();
@@ -393,6 +464,8 @@
     projects: projects, project: project, saveProject: saveProject, archiveProject: archiveProject, deleteProject: deleteProject,
     entries: entries, entry: entry, saveEntry: saveEntry, deleteEntry: deleteEntry,
     materials: materials, material: material, saveMaterial: saveMaterial,
+    trips: trips, trip: trip, saveTrip: saveTrip, deleteTrip: deleteTrip,
+    tripAmount: tripAmount, tripDistanceAmount: tripDistanceAmount,
     deleteMaterial: deleteMaterial, materialAmount: materialAmount,
     rateFor: rateFor, vatRateFor: vatRateFor, round2: round2,
     invoices: invoices, invoice: invoice, createInvoice: createInvoice, peekInvoiceNumber: peekInvoiceNumber,

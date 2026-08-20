@@ -372,6 +372,7 @@ input:focus, select:focus, textarea:focus {
 .badge-accent { background: var(--accent-soft); color: var(--accent); }
 .badge-danger { background: var(--danger-soft); color: var(--danger); }
 .badge-material { background: var(--warn-soft); color: var(--warn); }
+.badge-trip { background: var(--ok-soft); color: var(--ok); }
 
 /* ---------- Summering ---------- */
 

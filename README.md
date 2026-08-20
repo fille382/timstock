@@ -3,9 +3,9 @@
 Timmar, kommentarer och fakturor — ute på fältet.
 
 Mobilanpassad app för att registrera arbetade timmar med en kommentar per
-inlägg, hålla reda på material du lagt ut för, och göra fakturor av alltihop.
-Ren HTML/CSS/JS — inget bygge, inget ramverk, ingen server. All data ligger
-lokalt i webbläsaren (`localStorage`).
+inlägg, hålla reda på material du lagt ut för och körningar du gjort, och göra
+fakturor av alltihop. Ren HTML/CSS/JS — inget bygge, inget ramverk, ingen
+server. All data ligger lokalt i webbläsaren (`localStorage`).
 
 ## Kom igång
 
@@ -20,7 +20,7 @@ lokalt i webbläsaren (`localStorage`).
 2. Fyll i dina företagsuppgifter under **Inställningar** — de hamnar som
    avsändare på fakturorna.
 3. Lägg upp en kund under **Kunder & projekt** med timpris.
-4. Registrera tid och material under **Tidrapport**.
+4. Registrera tid, material och körningar under **Tidrapport**.
 5. Skapa faktura under **Fakturor**.
 
 ## Få upp appen på mobilen
@@ -70,6 +70,26 @@ marginal i formuläret och kan följa upp i CSV-exporten. Kunden ser á-priset.
 På fakturan specificeras material alltid rad för rad, även när tiden summeras per
 projekt — ett inköp är svårt att slå ihop begripligt med ett annat.
 
+## Körningar
+
+En körning är antal mil gånger milersättning, plus en valfri fast
+framkörningsavgift. Båda beloppen förifylls från Inställningar och går att ändra
+per resa. Knappen **× 2 (tur & retur)** dubblar sträckan när du bara vet enkel
+väg.
+
+> **Milersättningens belopp ändras med jämna mellanrum.** Appen har inget
+> inbyggt facit — kolla aktuell skattefri milersättning hos Skatteverket och
+> lägg in den under Inställningar.
+
+Fälten **Från**, **Till** och **Ärende** är körjournalsuppgifter. Startadressen
+förifylls med företagets adress. Filtrerar du CSV-exporten på `Typ = Körning` har
+du en färdig körjournal med datum, sträcka, rutt och ärende.
+
+På fakturan blir milen och framkörningsavgiften **två skilda rader**, så att
+kunden ser vad som är sträcka och vad som är fast avgift. I CSV:n gäller samma
+uppdelning, vilket gör att `Antal × Á-pris = Belopp` stämmer på varje enskild
+rad.
+
 ## Säkerhetskopiering
 
 Datan finns **bara i den webbläsare du använder**. Rensar du webbläsardata eller
@@ -78,7 +98,7 @@ byter telefon är den borta.
 Exportera regelbundet under **Inställningar → Säkerhetskopiering**:
 
 - **JSON** — fullständig kopia som kan importeras tillbaka.
-- **CSV** — all tid och allt material i en fil, för Excel eller bokföring.
+- **CSV** — tid, material och körjournal i en fil, för Excel eller bokföring.
 
 ## Filer
 
@@ -86,9 +106,9 @@ Exportera regelbundet under **Inställningar → Säkerhetskopiering**:
 | --- | --- |
 | `index.html` | Sidans stomme, flikar och bottenmeny |
 | `css/styles.css` | All formgivning, inklusive utskriftslayout |
-| `js/store.js` | Datalager: kunder, projekt, tid, material, fakturor |
+| `js/store.js` | Datalager: kunder, projekt, tid, material, körningar, fakturor |
 | `js/ui.js` | Formatering, toast och formulärpanelen |
-| `js/view-time.js` | Tidrapporten — tid och material |
+| `js/view-time.js` | Tidrapporten — tid, material och körningar |
 | `js/view-clients.js` | Kunder och projekt |
 | `js/view-invoices.js` | Fakturor, fakturamall och utskrift |
 | `js/view-settings.js` | Företagsuppgifter, standardvärden, backup |

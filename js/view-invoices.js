@@ -18,10 +18,13 @@
     var list = S.invoices();
     var unbilledEntries = S.entries({ status: 'unbilled' });
     var unbilledMaterials = S.materials({ status: 'unbilled' });
+    var unbilledTrips = S.trips({ status: 'unbilled' });
 
     var unbilledAmount = unbilledEntries.reduce(function (s, e) {
       return s + Number(e.hours || 0) * S.rateFor(e.clientId, e.projectId);
-    }, 0) + unbilledMaterials.reduce(function (s, m) { return s + S.materialAmount(m); }, 0);
+    }, 0)
+      + unbilledMaterials.reduce(function (s, m) { return s + S.materialAmount(m); }, 0)
+      + unbilledTrips.reduce(function (s, t) { return s + S.tripAmount(t); }, 0);
 
     var outstanding = list
       .filter(function (i) { return i.status !== 'betald'; })
@@ -38,11 +41,11 @@
       + '</div>';
 
     if (!list.length) {
-      var pending = unbilledEntries.length + unbilledMaterials.length;
+      var pending = unbilledEntries.length + unbilledMaterials.length + unbilledTrips.length;
       html += '<div class="empty">Inga fakturor ännu.<br>'
         + (pending
           ? 'Du har ' + pending + ' ofakturerade poster att fakturera.'
-          : 'Registrera tid eller material först, så kan du skapa en faktura.') + '</div>';
+          : 'Registrera tid, material eller körning först, så kan du skapa en faktura.') + '</div>';
     } else {
       html += '<div class="list">' + list.map(invoiceItem).join('') + '</div>';
     }
@@ -73,7 +76,8 @@
 
   function hasUnbilled(clientId) {
     return S.entries({ clientId: clientId, status: 'unbilled' }).length > 0
-      || S.materials({ clientId: clientId, status: 'unbilled' }).length > 0;
+      || S.materials({ clientId: clientId, status: 'unbilled' }).length > 0
+      || S.trips({ clientId: clientId, status: 'unbilled' }).length > 0;
   }
 
   function openNew() {
@@ -110,7 +114,8 @@
     html += '<div class="field"><label>Specifikation av tiden</label>'
       + '<div class="seg"><button type="button" data-mode="detailed" aria-pressed="true">Varje tidspost</button>'
       + '<button type="button" data-mode="grouped" aria-pressed="false">Summera per projekt</button></div>'
-      + '<p class="small muted" style="margin:8px 0 0">Material specificeras alltid rad för rad.</p></div>';
+      + '<p class="small muted" style="margin:8px 0 0">Material och körningar specificeras alltid '
+      + 'rad för rad.</p></div>';
 
     html += '<div class="field"><label for="i-notes">Meddelande på fakturan</label>'
       + '<textarea id="i-notes" placeholder="T.ex. Tack för förtroendet!"></textarea></div>';
@@ -129,18 +134,18 @@
           to: body.querySelector('#i-to').value || null,
           status: 'unbilled'
         };
-        return { entries: S.entries(q), materials: S.materials(q) };
+        return { entries: S.entries(q), materials: S.materials(q), trips: S.trips(q) };
       }
 
       function updatePreview() {
         var sel = selected();
         var clientId = body.querySelector('#i-client').value;
         var vatRate = S.vatRateFor(clientId);
-        var lines = buildLines(sel.entries, sel.materials, mode);
+        var lines = buildLines(sel.entries, sel.materials, sel.trips, mode);
         var sums = totals(lines, vatRate);
         var hours = sumHours(sel.entries);
         var box = body.querySelector('#i-preview');
-        var count = sel.entries.length + sel.materials.length;
+        var count = sel.entries.length + sel.materials.length + sel.trips.length;
 
         if (!count) {
           box.innerHTML = '<div class="empty small">Inget ofakturerat i vald period.</div>';
@@ -156,6 +161,13 @@
             ? '<div class="totals-row"><span class="muted">' + sel.materials.length
               + ' materialposter</span><span>'
               + U.money(sel.materials.reduce(function (t, m) { return t + S.materialAmount(m); }, 0))
+              + '</span></div>'
+            : '')
+          + (sel.trips.length
+            ? '<div class="totals-row"><span class="muted">' + sel.trips.length + ' körningar ('
+              + U.distance(sel.trips.reduce(function (t, x) { return t + Number(x.distance || 0); }, 0))
+              + ')</span><span>'
+              + U.money(sel.trips.reduce(function (t, x) { return t + S.tripAmount(x); }, 0))
               + '</span></div>'
             : '')
           + '<div class="totals-row"><span class="muted">Summa exkl. moms ('
@@ -192,7 +204,7 @@
         }
         if (ev.target.closest('[data-create]')) {
           var sel = selected();
-          create(body, sel.entries, sel.materials, mode);
+          create(body, sel.entries, sel.materials, sel.trips, mode);
         }
       });
 
@@ -209,11 +221,16 @@
     return S.round2(entries.reduce(function (s, e) { return s + Number(e.hours || 0); }, 0));
   }
 
-  /* Bygger fakturarader ur tidsposter och material. Raderna sparas på fakturan
-     så att historiken inte ändras om timpriset justeras senare. */
-  function buildLines(entries, materials, mode) {
+  /* Bygger fakturarader ur tid, material och körningar. Raderna sparas på
+     fakturan så att historiken inte ändras om timpriset justeras senare. */
+  function buildLines(entries, materials, trips, mode) {
     var lines = [];
-    var byDate = function (a, b) { return a.date < b.date ? -1 : 1; };
+
+    /* Aldst forst, sa fakturan lases uppifran och ner i kronologisk ordning. */
+    var byDate = function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return (a.createdAt || '') < (b.createdAt || '') ? -1 : 1;
+    };
 
     if (mode === 'grouped') {
       var groups = {};
@@ -272,6 +289,42 @@
       });
     });
 
+    /* Körningar: milen och framkörningsavgiften blir skilda rader, så att
+       kunden ser vad som är sträcka och vad som är fast avgift. */
+    trips.slice().sort(byDate).forEach(function (t) {
+      var p = t.projectId ? S.project(t.projectId) : null;
+      /* Bara en halv rutt sager inte kunden nagot - visa den nar bada finns. */
+      var where = t.from && t.to ? t.from + ' – ' + t.to : '';
+      var base = t.purpose ? 'Körning, ' + t.purpose : 'Körning';
+      if (where) base += ' (' + where + ')';
+      if (mode === 'grouped') base += ' ' + t.date;
+      if (p) base = p.name + ' – ' + base;
+
+      if (Number(t.distance) > 0 && Number(t.rate) > 0) {
+        lines.push({
+          date: t.date,
+          description: base,
+          qty: Number(t.distance),
+          unit: 'mil',
+          rate: Number(t.rate),
+          amount: S.tripDistanceAmount(t)
+        });
+      }
+
+      if (Number(t.fee) > 0) {
+        lines.push({
+          date: t.date,
+          description: 'Framkörningsavgift'
+            + (t.purpose ? ', ' + t.purpose : '')
+            + (where ? ' (' + where + ')' : ''),
+          qty: 1,
+          unit: 'st',
+          rate: Number(t.fee),
+          amount: S.round2(Number(t.fee))
+        });
+      }
+    });
+
     return lines;
   }
 
@@ -281,14 +334,17 @@
     return { subtotal: subtotal, vat: vat, total: S.round2(subtotal + vat) };
   }
 
-  function create(body, entries, materials, mode) {
-    if (!entries.length && !materials.length) { U.toast('Inget valt', true); return; }
+  function create(body, entries, materials, trips, mode) {
+    if (!entries.length && !materials.length && !trips.length) {
+      U.toast('Inget valt', true);
+      return;
+    }
 
     var clientId = body.querySelector('#i-client').value;
     var c = S.client(clientId);
     var comp = S.company();
     var vatRate = S.vatRateFor(clientId);
-    var lines = buildLines(entries, materials, mode);
+    var lines = buildLines(entries, materials, trips, mode);
     var sums = totals(lines, vatRate);
 
     var inv = S.createInvoice({
@@ -302,11 +358,14 @@
       dueDate: body.querySelector('#i-due').value || '',
       entryIds: entries.map(function (e) { return e.id; }),
       materialIds: materials.map(function (m) { return m.id; }),
+      tripIds: trips.map(function (t) { return t.id; }),
       lines: lines,
       mode: mode,
       vatRate: vatRate,
       hours: sumHours(entries),
       materialTotal: S.round2(materials.reduce(function (s, m) { return s + S.materialAmount(m); }, 0)),
+      distance: S.round2(trips.reduce(function (s, t) { return s + Number(t.distance || 0); }, 0)),
+      tripTotal: S.round2(trips.reduce(function (s, t) { return s + S.tripAmount(t); }, 0)),
       subtotal: sums.subtotal,
       vat: sums.vat,
       total: sums.total,
@@ -349,6 +408,10 @@
         ? '<div class="totals-row"><span class="muted">Material</span><span>'
           + U.money(inv.materialTotal) + '</span></div>'
         : '')
+      + (inv.tripTotal
+        ? '<div class="totals-row"><span class="muted">Körning (' + U.distance(inv.distance)
+          + ')</span><span>' + U.money(inv.tripTotal) + '</span></div>'
+        : '')
       + '<div class="totals-row"><span class="muted">Moms ' + U.esc(inv.vatRate) + '%</span><span>'
       + U.money(inv.vat) + '</span></div>'
       + '<div class="totals-row grand"><span>Att betala</span><span>' + U.money(inv.total) + '</span></div>'
@@ -359,8 +422,8 @@
 
     html += '<div class="section-title">Hantera</div>';
     html += '<button class="btn btn-danger btn-block" data-delete-invoice>Ta bort faktura</button>';
-    html += '<p class="small muted" style="margin-top:8px">Tidsposter och material blir ofakturerade '
-      + 'igen och kan faktureras om. Fakturanumret återanvänds inte.</p>';
+    html += '<p class="small muted" style="margin-top:8px">Tid, material och körningar blir '
+      + 'ofakturerade igen och kan faktureras om. Fakturanumret återanvänds inte.</p>';
 
     U.openSheet('Faktura ' + inv.number, html, function (body) {
       body.addEventListener('click', function (ev) {

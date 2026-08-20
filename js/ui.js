@@ -24,6 +24,7 @@
   function money(n) { return moneyFmt.format(round2(Number(n) || 0)) + ' kr'; }
   function money0(n) { return moneyFmt0.format(Math.round(Number(n) || 0)) + ' kr'; }
   function hours(n) { return hourFmt.format(Number(n) || 0) + ' h'; }
+  function distance(n) { return hourFmt.format(Number(n) || 0) + ' mil'; }
   function round2(n) { return Math.round((Number(n) + Number.EPSILON) * 100) / 100; }
 
   var MONTHS = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
@@ -156,7 +157,7 @@
   }
 
   global.UI = {
-    esc: esc, money: money, money0: money0, hours: hours, round2: round2,
+    esc: esc, money: money, money0: money0, hours: hours, distance: distance, round2: round2,
     dateShort: dateShort, parseISO: parseISO, toISO: toISO, addDays: addDays,
     monthRange: monthRange, monthLabel: monthLabel, parseHours: parseHours,
     toast: toast, initSheet: initSheet, openSheet: openSheet, closeSheet: closeSheet,

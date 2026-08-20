@@ -1,4 +1,4 @@
-/* view-time.js - dagboken: registrera timmar och material, se och redigera. */
+/* view-time.js - dagboken: registrera tid, material och korningar. */
 (function (global) {
   'use strict';
 
@@ -35,13 +35,15 @@
     return p ? name + ' · ' + p.name : name;
   }
 
-  /* Slår ihop tid och material till en gemensam, datumsorterad lista. */
+  /* Slår ihop tid, material och körningar till en gemensam, datumsorterad lista. */
   function combined() {
     var q = query();
     var items = S.entries(q).map(function (e) {
       return { type: 'time', date: e.date, createdAt: e.createdAt || '', obj: e };
     }).concat(S.materials(q).map(function (m) {
       return { type: 'material', date: m.date, createdAt: m.createdAt || '', obj: m };
+    })).concat(S.trips(q).map(function (t) {
+      return { type: 'trip', date: t.date, createdAt: t.createdAt || '', obj: t };
     }));
 
     return items.sort(function (a, b) {
@@ -51,7 +53,13 @@
   }
 
   function itemAmount(it) {
-    return it.type === 'time' ? amountOf(it.obj) : S.materialAmount(it.obj);
+    if (it.type === 'time') return amountOf(it.obj);
+    if (it.type === 'trip') return S.tripAmount(it.obj);
+    return S.materialAmount(it.obj);
+  }
+
+  function sumBy(items, fn) {
+    return items.reduce(function (s, it) { return s + fn(it); }, 0);
   }
 
   /* ---------- Rendering ---------- */
@@ -60,37 +68,44 @@
     container = el;
     var items = combined();
 
-    var totalHours = items.reduce(function (s, it) {
-      return s + (it.type === 'time' ? Number(it.obj.hours || 0) : 0);
-    }, 0);
-    var totalAmount = items.reduce(function (s, it) { return s + itemAmount(it); }, 0);
-    var unbilledAmount = items.reduce(function (s, it) {
-      return s + (it.obj.invoiceId ? 0 : itemAmount(it));
-    }, 0);
-    var materialAmount = items.reduce(function (s, it) {
-      return s + (it.type === 'material' ? itemAmount(it) : 0);
-    }, 0);
+    var totalHours = sumBy(items, function (it) {
+      return it.type === 'time' ? Number(it.obj.hours || 0) : 0;
+    });
+    var totalDistance = sumBy(items, function (it) {
+      return it.type === 'trip' ? Number(it.obj.distance || 0) : 0;
+    });
+    var totalAmount = sumBy(items, itemAmount);
+    var unbilledAmount = sumBy(items, function (it) {
+      return it.obj.invoiceId ? 0 : itemAmount(it);
+    });
+    var materialAmount = sumBy(items, function (it) {
+      return it.type === 'material' ? itemAmount(it) : 0;
+    });
+    var tripAmount = sumBy(items, function (it) {
+      return it.type === 'trip' ? itemAmount(it) : 0;
+    });
 
     var clients = S.clients();
     var html = '';
 
-    html += '<div class="btn-row" style="margin-bottom:16px">'
-      + '<button class="btn btn-primary" data-new>+ Tid</button>'
+    html += '<button class="btn btn-primary btn-block" data-new>+ Registrera tid</button>'
+      + '<div class="btn-row" style="margin:10px 0 16px">'
       + '<button class="btn" data-new-material>+ Material</button>'
+      + '<button class="btn" data-new-trip>+ Körning</button>'
       + '</div>';
 
     if (!clients.length) {
       html += '<div class="card"><div class="card-title">Kom igång</div>'
         + '<p class="small muted" style="margin:0 0 12px">Lägg upp din första kund så kan du börja '
-        + 'registrera timmar och material och fakturera.</p>'
+        + 'registrera timmar, material och körningar och fakturera.</p>'
         + '<button class="btn btn-block" data-goto="clients">Lägg till kund</button></div>';
     }
 
     html += '<div class="stats">'
       + '<div class="stat"><div class="stat-value">' + U.hours(totalHours) + '</div>'
       + '<div class="stat-label">Timmar</div></div>'
-      + '<div class="stat"><div class="stat-value">' + U.money0(materialAmount) + '</div>'
-      + '<div class="stat-label">Material</div></div>'
+      + '<div class="stat"><div class="stat-value">' + U.distance(totalDistance) + '</div>'
+      + '<div class="stat-label">Mil</div></div>'
       + '<div class="stat"><div class="stat-value">' + U.money0(unbilledAmount) + '</div>'
       + '<div class="stat-label">Ofakturerat</div></div>'
       + '</div>';
@@ -122,6 +137,10 @@
         + (materialAmount
           ? '<div class="totals-row"><span>Material</span><span>' + U.money(materialAmount) + '</span></div>'
           : '')
+        + (tripAmount
+          ? '<div class="totals-row"><span>Körning (' + U.distance(totalDistance) + ')</span><span>'
+            + U.money(tripAmount) + '</span></div>'
+          : '')
         + '<div class="totals-row"><span>Belopp exkl. moms</span><span>' + U.money(totalAmount) + '</span></div>'
         + '<div class="totals-row grand"><span>Varav ofakturerat</span><span>' + U.money(unbilledAmount) + '</span></div>'
         + '</div>';
@@ -144,16 +163,20 @@
 
     function flush() {
       if (!buffer.length) return;
-      var dayHours = buffer.reduce(function (s, it) {
-        return s + (it.type === 'time' ? Number(it.obj.hours || 0) : 0);
-      }, 0);
-      var dayMaterial = buffer.reduce(function (s, it) {
-        return s + (it.type === 'material' ? itemAmount(it) : 0);
-      }, 0);
+      var dayHours = sumBy(buffer, function (it) {
+        return it.type === 'time' ? Number(it.obj.hours || 0) : 0;
+      });
+      var dayDistance = sumBy(buffer, function (it) {
+        return it.type === 'trip' ? Number(it.obj.distance || 0) : 0;
+      });
+      var dayExtra = sumBy(buffer, function (it) {
+        return it.type === 'time' ? 0 : itemAmount(it);
+      });
 
       var summary = [];
       if (dayHours) summary.push(U.hours(dayHours));
-      if (dayMaterial) summary.push(U.money0(dayMaterial));
+      if (dayDistance) summary.push(U.distance(dayDistance));
+      if (dayExtra) summary.push(U.money0(dayExtra));
 
       html += '<div class="section-title" style="display:flex;justify-content:space-between">'
         + '<span>' + U.esc(U.dateShort(currentDate)) + '</span>'
@@ -171,7 +194,9 @@
   }
 
   function itemHTML(it) {
-    return it.type === 'time' ? entryHTML(it.obj) : materialHTML(it.obj);
+    if (it.type === 'time') return entryHTML(it.obj);
+    if (it.type === 'trip') return tripHTML(it.obj);
+    return materialHTML(it.obj);
   }
 
   function billedBadge(obj) {
@@ -214,7 +239,38 @@
       + '</button>';
   }
 
-  /* ---------- Gemensamt för båda formulären ---------- */
+  /* Rutten "Fältgatan 12 → Hisingsleden 40", eller det som är ifyllt av dem. */
+  function route(t) {
+    if (t.from && t.to) return t.from + ' → ' + t.to;
+    return t.from || t.to || '';
+  }
+
+  function tripHTML(t) {
+    var parts = [];
+    if (t.distance) {
+      parts.push('<span>' + U.distance(t.distance) + ' × ' + U.money0(t.rate) + '</span>');
+    }
+    if (t.fee) {
+      parts.push('<span>Framkörning ' + U.money0(t.fee) + '</span>');
+    }
+
+    var text = [route(t), t.purpose].filter(function (x) { return x; }).join(' · ');
+
+    return '<button class="item" data-edit-trip="' + U.esc(t.id) + '" type="button">'
+      + '<div class="item-top">'
+      + '<span class="item-title">' + U.esc(label(t.clientId, t.projectId)) + '</span>'
+      + '<span class="item-amount">' + U.money(S.tripAmount(t)) + '</span>'
+      + '</div>'
+      + '<div class="item-sub">'
+      + parts.join('<span class="dot">•</span>')
+      + '<span class="badge badge-trip">Körning</span>'
+      + billedBadge(t)
+      + '</div>'
+      + (text ? '<div class="item-comment">' + U.esc(text) + '</div>' : '')
+      + '</button>';
+  }
+
+  /* ---------- Gemensamt för formulären ---------- */
 
   function requireClient() {
     if (S.clients().length) return true;
@@ -223,17 +279,15 @@
     return false;
   }
 
+  /* Senast använda kunden, oavsett posttyp — sparar en knapptryckning. */
   function defaultClientId() {
     if (filter.clientId) return filter.clientId;
-    var recentTime = S.entries()[0];
-    var recentMat = S.materials()[0];
-    if (recentTime && recentMat) {
-      return (recentTime.createdAt || '') >= (recentMat.createdAt || '')
-        ? recentTime.clientId : recentMat.clientId;
-    }
-    if (recentTime) return recentTime.clientId;
-    if (recentMat) return recentMat.clientId;
-    return S.clients()[0].id;
+
+    var newest = [S.entries()[0], S.materials()[0], S.trips()[0]]
+      .filter(Boolean)
+      .sort(function (a, b) { return (b.createdAt || '') < (a.createdAt || '') ? -1 : 1; })[0];
+
+    return newest ? newest.clientId : S.clients()[0].id;
   }
 
   function clientFields(clientId, selectedProjectId, disabled) {
@@ -551,6 +605,178 @@
     render(container);
   }
 
+  /* ---------- Körningsformulär ---------- */
+
+  function openTripForm(id) {
+    var t = id ? S.trip(id) : null;
+    if (!t && !requireClient()) return;
+
+    var s = S.settings();
+    var clientId = t ? t.clientId : defaultClientId();
+    var billed = t && t.invoiceId;
+    var dis = billed ? ' disabled' : '';
+    var rate = t ? t.rate : s.mileageRate;
+    var fee = t ? t.fee : s.calloutFee;
+    var html = '';
+
+    if (billed) html += lockedNotice(t);
+
+    html += '<div class="field"><label for="f-date">Datum</label>'
+      + '<input type="date" id="f-date" value="' + U.esc(t ? t.date : S.todayISO()) + '"' + dis + '></div>';
+
+    html += clientFields(clientId, t ? t.projectId : '', dis);
+
+    html += '<div class="field"><label for="t-distance">Antal mil</label>'
+      + '<input type="text" id="t-distance" inputmode="decimal" autocomplete="off" placeholder="t.ex. 4,5"'
+      + ' value="' + U.esc(t && t.distance ? String(t.distance).replace('.', ',') : '') + '"' + dis + '>'
+      + (billed ? '' : '<div class="quick quick-periods">'
+        + '<button type="button" data-double>× 2 (tur &amp; retur)</button>'
+        + '<button type="button" data-clear title="Nollställ">C</button></div>')
+      + '</div>';
+
+    html += '<div class="row">'
+      + '<div class="field"><label for="t-rate">Milersättning (kr/mil)</label>'
+      + '<input type="text" id="t-rate" inputmode="decimal" autocomplete="off"'
+      + ' value="' + U.esc(String(rate || 0).replace('.', ',')) + '"' + dis + '></div>'
+      + '<div class="field"><label for="t-fee">Framkörning (kr)</label>'
+      + '<input type="text" id="t-fee" inputmode="decimal" autocomplete="off" placeholder="0"'
+      + ' value="' + U.esc(fee ? String(fee).replace('.', ',') : '') + '"' + dis + '></div>'
+      + '</div>';
+
+    html += '<div class="section-title" style="margin-left:0">Körjournal</div>';
+
+    html += '<div class="field"><label for="t-from">Från</label>'
+      + '<input type="text" id="t-from" placeholder="Startadress"'
+      + ' value="' + U.esc(t ? t.from : (S.company().address || '')) + '"' + dis + '></div>';
+
+    html += '<div class="field"><label for="t-to">Till</label>'
+      + '<input type="text" id="t-to" placeholder="Måladress"'
+      + ' value="' + U.esc(t ? t.to : '') + '"' + dis + '></div>';
+
+    html += '<div class="field"><label for="t-purpose">Ärende</label>'
+      + '<input type="text" id="t-purpose" placeholder="t.ex. Takarbete"'
+      + ' value="' + U.esc(t ? t.purpose : '') + '"' + dis + '></div>';
+
+    html += '<div id="t-preview" class="totals small" style="margin-bottom:14px"></div>';
+
+    if (!billed) {
+      html += '<button class="btn btn-primary btn-block" data-save-trip>'
+        + (t ? 'Spara ändringar' : 'Lägg till körning') + '</button>';
+      if (t) {
+        html += '<button class="btn btn-danger btn-block" data-delete-trip style="margin-top:10px">'
+          + 'Ta bort</button>';
+      }
+    }
+
+    U.openSheet(t ? 'Redigera körning' : 'Ny körning', html, function (body) {
+      var distEl = body.querySelector('#t-distance');
+      var rateEl = body.querySelector('#t-rate');
+      var feeEl = body.querySelector('#t-fee');
+
+      function values() {
+        var d = U.parseHours(distEl.value);
+        var r = U.parseHours(rateEl.value);
+        var f = U.parseHours(feeEl.value);
+        return {
+          distance: isFinite(d) ? d : 0,
+          rate: isFinite(r) ? r : 0,
+          fee: isFinite(f) ? f : 0
+        };
+      }
+
+      function updatePreview() {
+        var v = values();
+        var mil = S.round2(v.distance * v.rate);
+        var vat = S.vatRateFor(body.querySelector('#f-client').value);
+        var sum = S.round2(mil + v.fee);
+
+        body.querySelector('#t-preview').innerHTML =
+          '<div class="totals-row"><span class="muted">' + U.distance(v.distance) + ' × '
+          + U.money0(v.rate) + '</span><span>' + U.money(mil) + '</span></div>'
+          + (v.fee
+            ? '<div class="totals-row"><span class="muted">Framkörning</span><span>'
+              + U.money(v.fee) + '</span></div>'
+            : '')
+          + '<div class="totals-row"><span class="muted">Moms ' + vat + '%</span><span>'
+          + U.money(sum * vat / 100) + '</span></div>'
+          + '<div class="totals-row grand"><span>Att fakturera</span><span>' + U.money(sum) + '</span></div>';
+      }
+
+      wireClientChange(body, updatePreview);
+      distEl.addEventListener('input', updatePreview);
+      rateEl.addEventListener('input', updatePreview);
+      feeEl.addEventListener('input', updatePreview);
+
+      body.addEventListener('click', function (ev) {
+        if (ev.target.closest('[data-double]')) {
+          var d = U.parseHours(distEl.value);
+          if (isFinite(d) && d > 0) {
+            distEl.value = String(S.round2(d * 2)).replace('.', ',');
+            updatePreview();
+          } else {
+            U.toast('Fyll i sträckan enkel väg först', true);
+          }
+          return;
+        }
+        if (ev.target.closest('[data-clear]')) {
+          distEl.value = '';
+          updatePreview();
+          return;
+        }
+        if (ev.target.closest('[data-save-trip]')) { submitTrip(body, t); return; }
+        if (ev.target.closest('[data-delete-trip]')) {
+          if (!confirm('Ta bort körningen?')) return;
+          if (S.deleteTrip(t.id)) {
+            U.closeSheet();
+            U.toast('Körning borttagen');
+            render(container);
+          } else {
+            U.toast('Posten är fakturerad och kan inte tas bort', true);
+          }
+        }
+      });
+
+      updatePreview();
+    });
+  }
+
+  function submitTrip(body, existing) {
+    var date = body.querySelector('#f-date').value;
+    var clientId = body.querySelector('#f-client').value;
+    var distance = U.parseHours(body.querySelector('#t-distance').value);
+    var rate = U.parseHours(body.querySelector('#t-rate').value);
+    var fee = U.parseHours(body.querySelector('#t-fee').value);
+
+    if (!isFinite(distance)) distance = 0;
+    if (!isFinite(rate)) rate = 0;
+    if (!isFinite(fee)) fee = 0;
+
+    if (!date) { U.toast('Välj datum', true); return; }
+    if (!clientId) { U.toast('Välj kund', true); return; }
+    if (distance < 0 || rate < 0 || fee < 0) { U.toast('Negativa belopp går inte', true); return; }
+    if (distance * rate + fee <= 0) {
+      U.toast('Fyll i antal mil eller en framkörningsavgift', true);
+      return;
+    }
+
+    S.saveTrip({
+      id: existing ? existing.id : null,
+      date: date,
+      clientId: clientId,
+      projectId: selectedProjectId(body) || null,
+      distance: S.round2(distance),
+      rate: S.round2(rate),
+      fee: S.round2(fee),
+      from: body.querySelector('#t-from').value.trim(),
+      to: body.querySelector('#t-to').value.trim(),
+      purpose: body.querySelector('#t-purpose').value.trim()
+    });
+
+    U.closeSheet();
+    U.toast(existing ? 'Sparad' : 'Körning tillagd');
+    render(container);
+  }
+
   /* ---------- Händelser ---------- */
 
   /* Lyssnarna kopplas in en enda gang pa vyns behallare - innehallet ritas om,
@@ -576,12 +802,16 @@
       }
       if (ev.target.closest('[data-new]')) { openForm(null); return; }
       if (ev.target.closest('[data-new-material]')) { openMaterialForm(null); return; }
+      if (ev.target.closest('[data-new-trip]')) { openTripForm(null); return; }
 
       var edit = ev.target.closest('[data-edit]');
       if (edit) { openForm(edit.getAttribute('data-edit')); return; }
 
       var editM = ev.target.closest('[data-edit-material]');
       if (editM) { openMaterialForm(editM.getAttribute('data-edit-material')); return; }
+
+      var editT = ev.target.closest('[data-edit-trip]');
+      if (editT) { openTripForm(editT.getAttribute('data-edit-trip')); return; }
 
       var goto = ev.target.closest('[data-goto]');
       if (goto) { global.App.go(goto.getAttribute('data-goto')); }
