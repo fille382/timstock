@@ -1,4 +1,4 @@
-# serve.ps1 - liten lokal webbserver for att testa appen pa din dator.
+# serve.ps1 - liten lokal webbserver for att testa Timstock pa din dator.
 # Kor:  powershell -ExecutionPolicy Bypass -File serve.ps1
 # Oppna sedan http://localhost:8080 i webblasaren. Avsluta med Ctrl+C.
 #
@@ -28,7 +28,7 @@ if ($Public) { $listener.Prefixes.Add("http://+:$Port/") }
 else { $listener.Prefixes.Add("http://localhost:$Port/") }
 $listener.Start()
 
-Write-Host "Fakturering kor pa http://localhost:$Port"
+Write-Host "Timstock kor pa http://localhost:$Port"
 if ($Public) {
     $ips = Get-NetIPAddress -AddressFamily IPv4 |
         Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' }

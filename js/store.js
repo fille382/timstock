@@ -2,7 +2,8 @@
 (function (global) {
   'use strict';
 
-  var KEY = 'fakturering.v1';
+  var KEY = 'timstock.v1';
+  var LEGACY_KEY = 'fakturering.v1'; // appen het Fakturering innan den fick namn
 
   function defaults() {
     return {
@@ -49,6 +50,7 @@
   function load() {
     try {
       var stored = global.localStorage.getItem(KEY);
+      if (stored === null) stored = global.localStorage.getItem(LEGACY_KEY);
       data = migrate(stored ? JSON.parse(stored) : null);
     } catch (err) {
       console.error('Kunde inte lasa sparad data:', err);

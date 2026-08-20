@@ -70,7 +70,7 @@
     html += '<div class="card"><div class="card-title">Farlig zon</div>'
       + '<button class="btn btn-danger btn-block" data-reset>Radera all data</button></div>';
 
-    html += '<p class="small muted" style="text-align:center;margin:20px 0">Fakturering · lokal data, ingen server</p>';
+    html += '<p class="small muted" style="text-align:center;margin:20px 0">Timstock · lokal data, ingen server</p>';
 
     el.innerHTML = html;
     wire(el);
@@ -138,7 +138,7 @@
       }
 
       if (ev.target.closest('[data-export]')) {
-        U.download('fakturering-backup-' + S.todayISO() + '.json', S.exportJSON());
+        U.download('timstock-backup-' + S.todayISO() + '.json', S.exportJSON());
         U.toast('Säkerhetskopia exporterad');
         return;
       }

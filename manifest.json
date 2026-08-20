@@ -1,7 +1,7 @@
 {
-  "name": "Fakturering",
-  "short_name": "Fakturering",
-  "description": "Registrera arbetade timmar med kommentar och skapa fakturor.",
+  "name": "Timstock",
+  "short_name": "Timstock",
+  "description": "Timmar, kommentarer och fakturor — ute på fältet.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

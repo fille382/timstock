@@ -1,8 +1,10 @@
-# Fakturering
+# Timstock
 
-Mobilanpassad app för att registrera arbetade timmar med kommentar, och skapa
-fakturor av dem. Ren HTML/CSS/JS — inget bygge, inget ramverk, ingen server.
-All data ligger lokalt i webbläsaren (`localStorage`).
+Timmar, kommentarer och fakturor — ute på fältet.
+
+Mobilanpassad app för att registrera arbetade timmar med en kommentar per
+inlägg, och göra fakturor av dem. Ren HTML/CSS/JS — inget bygge, inget ramverk,
+ingen server. All data ligger lokalt i webbläsaren (`localStorage`).
 
 ## Kom igång
 
