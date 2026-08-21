@@ -50,6 +50,9 @@
 
 * { box-sizing: border-box; }
 
+/* hidden-attributet ska alltid vinna, aven over regler som satter display. */
+[hidden] { display: none !important; }
+
 /* Bakgrundsfärgen ligger på html så att tumstockarna kan placeras bakom
    innehållet utan att målas över av body. */
 html {

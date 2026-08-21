@@ -279,6 +279,15 @@
       + ' value="' + U.esc(x ? String(x.vat).replace('.', ',') : '') + '"></div>'
       + '</div>';
 
+    /* Star momsen inte utlast pa kvittot raknar knapparna fram den ur
+       totalbeloppet - moms 25 % ar 20 % AV totalen (25/125), inte 25 %.
+       Den frallan slipper man har. */
+    html += '<div class="quick" style="margin:-6px 0 12px">'
+      + '<button type="button" data-vat-rate="25">moms 25 %</button>'
+      + '<button type="button" data-vat-rate="12">moms 12 %</button>'
+      + '<button type="button" data-vat-rate="6">moms 6 %</button>'
+      + '</div>';
+
     html += '<p class="small muted" style="margin:-4px 0 12px">Ett kvitto = en utgift. '
       + 'Köpte du flera saker: lista dem i beskrivningen och skriv kvittots totalsumma '
       + 'och totalmoms — fotot visar ändå detaljerna. Utgiften hamnar aldrig på någon '
@@ -298,6 +307,18 @@
       var photo = U.initPhotoField(body, x ? x.photoId : '');
 
       body.addEventListener('click', function (ev) {
+        var vr = ev.target.closest('[data-vat-rate]');
+        if (vr) {
+          var g = U.parseHours(body.querySelector('#x-gross').value);
+          if (!isFinite(g) || g <= 0) {
+            U.toast('Fyll i beloppet först', true);
+            return;
+          }
+          var rate = Number(vr.getAttribute('data-vat-rate'));
+          body.querySelector('#x-vat').value =
+            String(S.round2(g * rate / (100 + rate))).replace('.', ',');
+          return;
+        }
         if (ev.target.closest('[data-save-expense]')) {
           var date = body.querySelector('#x-date').value;
           var desc = body.querySelector('#x-desc').value.trim();
