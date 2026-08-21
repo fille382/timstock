@@ -251,6 +251,14 @@ deklarationen frågar efter, så långt appen kan se dem:
 Växeln **Fakturadatum/Betaldatum** ska följa metoden i din momsregistrering
 hos Skatteverket (faktureringsmetoden respektive bokslutsmetoden).
 
+Redovisningsperioden — **varje månad, varje kvartal eller helår** — ställs in
+under Inställningar och ska spegla momsregistreringen. Den styr både
+periodvalen i underlaget och **deadline-påminnelsen** överst: fram till förra
+periodens deklarationsdag visas den med nedräkning (gul när det är två veckor
+kvar), därefter nästa periods datum. Månads- och kvartalsmoms deklareras den
+12:e i andra månaden efter perioden (17:e i augusti och januari); helårsmomsens
+datum varierar — kolla registerutdraget.
+
 **Skriv ut / PDF** ger en sida att ha framför sig när deklarationen fylls i:
 summorna överst och därunder specifikationen — varje faktura, materialinköp
 och utgift som ligger bakom siffrorna.

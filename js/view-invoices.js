@@ -82,8 +82,28 @@
      hor till nagot uppdrag). Ersatter inte bokforingen - men bespar
      hopraknandet. */
 
-  function quarterRange(offset) {
+  /* Redovisningsperioden - manad, kvartal eller helar - kommer fran
+     installningarna och ska spegla foretagets momsregistrering. */
+  function vatPeriod() {
+    var p = S.settings().vatPeriod;
+    return (p === 'manad' || p === 'helar') ? p : 'kvartal';
+  }
+
+  function periodRange(offset) {
+    var per = vatPeriod();
     var now = new Date();
+
+    if (per === 'manad') {
+      var f = new Date(now.getFullYear(), now.getMonth() + (offset || 0), 1);
+      var l = new Date(f.getFullYear(), f.getMonth() + 1, 0);
+      return { from: U.toISO(f), to: U.toISO(l), label: U.monthLabel(U.toISO(f)) };
+    }
+
+    if (per === 'helar') {
+      var y = now.getFullYear() + (offset || 0);
+      return { from: y + '-01-01', to: y + '-12-31', label: String(y) };
+    }
+
     var first = new Date(now.getFullYear(), (Math.floor(now.getMonth() / 3) + (offset || 0)) * 3, 1);
     var last = new Date(first.getFullYear(), first.getMonth() + 3, 0);
     return {
@@ -92,18 +112,61 @@
     };
   }
 
+  /* Deadline for manads- och kvartalsmoms: den 12:e i andra manaden efter
+     periodens slut, utom i augusti och januari da den 17:e. For helar (utan
+     EU-handel varierar datumen) antas kalenderar och 26 februari - med en
+     brasklapp i texten. */
+  function vatDeadline(offset) {
+    var end = U.parseISO(periodRange(offset).to);
+    if (vatPeriod() === 'helar') {
+      return U.toISO(new Date(end.getFullYear() + 1, 1, 26));
+    }
+    var d = new Date(end.getFullYear(), end.getMonth() + 2, 1);
+    var day = (d.getMonth() === 7 || d.getMonth() === 0) ? 17 : 12;
+    return U.toISO(new Date(d.getFullYear(), d.getMonth(), day));
+  }
+
+  var PERIOD_NAMES = { manad: 'månadsmoms', kvartal: 'kvartalsmoms', helar: 'helårsmoms' };
+
+  /* Paminnelsen overst i momsunderlaget. Fram till forra periodens deadline
+     ar det den som galler - darefter visas nasta i lugnare ton. */
+  function vatDeadlineNotice() {
+    var today = S.todayISO();
+    var prev = vatDeadline(-1);
+    var perName = PERIOD_NAMES[vatPeriod()];
+    var caveat = 'Hamnar datumet på en helg gäller nästa vardag. Perioden ('
+      + perName + ') ställs in under Inställningar'
+      + (vatPeriod() === 'helar'
+        ? ' — och helårsmomsens datum varierar med EU-handel och bolagsform, kolla ditt registerutdrag'
+        : '') + '.';
+
+    if (today <= prev) {
+      var days = daysBetween(today, prev);
+      return note(days <= 14 ? 'warn' : 'ok',
+        'Momsdeklaration ' + periodRange(-1).label,
+        'Ska vara inlämnad — och momsen betald — senast <b>' + U.esc(prev) + '</b>'
+        + (days === 0 ? ' (i dag!)' : ' (' + days + ' dagar kvar)') + '. ' + caveat);
+    }
+
+    return '<p class="small muted" style="margin:0 0 10px">Nästa momsdeklaration: '
+      + U.esc(periodRange(0).label) + ' lämnas senast <b>' + U.esc(vatDeadline(0))
+      + '</b> (' + perName + ').</p>';
+  }
+
   function vatCardHTML() {
-    var range = quarterRange(vatQuarter);
+    var range = periodRange(vatQuarter);
     var r = S.vatReport(range.from, range.to, vatBasis);
     var xs = S.expenses({ from: range.from, to: range.to });
 
     var html = '<div class="section-title">Momsunderlag</div>';
 
+    html += vatDeadlineNotice();
+
     html += '<div class="seg" style="margin-bottom:8px">'
       + '<button type="button" data-vat-quarter="0" aria-pressed="' + (vatQuarter === 0) + '">'
-      + quarterRange(0).label + '</button>'
+      + periodRange(0).label + '</button>'
       + '<button type="button" data-vat-quarter="-1" aria-pressed="' + (vatQuarter === -1) + '">'
-      + quarterRange(-1).label + '</button>'
+      + periodRange(-1).label + '</button>'
       + '</div>';
 
     html += '<div class="seg" style="margin-bottom:14px">'
@@ -253,7 +316,7 @@
 
   function printVatReport() {
     var area = document.getElementById('print-area');
-    area.innerHTML = vatPrintHTML(quarterRange(vatQuarter), vatBasis);
+    area.innerHTML = vatPrintHTML(periodRange(vatQuarter), vatBasis);
     setTimeout(function () { global.print(); }, 60);
   }
 

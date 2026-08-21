@@ -22,7 +22,8 @@
         invoicePrefix: '',
         nextInvoiceNumber: 1,
         rotPercent: 30,
-        rotMaxPerYear: 50000
+        rotMaxPerYear: 50000,
+        vatPeriod: 'kvartal' // 'manad' | 'kvartal' | 'helar'
       },
       clients: [],
       projects: [],

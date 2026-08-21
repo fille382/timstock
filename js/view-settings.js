@@ -59,6 +59,15 @@
       + '<p class="small muted" style="margin:-6px 0 12px">Båda förifylls på nya körningar och går '
       + 'att ändra per resa. Kolla aktuell skattefri milersättning hos Skatteverket — beloppet '
       + 'ändras med jämna mellanrum.</p>'
+      + '<div class="field"><label for="s-vat-period">Momsdeklaration</label>'
+      + '<select id="s-vat-period">'
+      + '<option value="manad"' + (s.vatPeriod === 'manad' ? ' selected' : '') + '>Varje månad</option>'
+      + '<option value="kvartal"' + (s.vatPeriod !== 'manad' && s.vatPeriod !== 'helar' ? ' selected' : '') + '>Varje kvartal</option>'
+      + '<option value="helar"' + (s.vatPeriod === 'helar' ? ' selected' : '') + '>En gång om året (helår)</option>'
+      + '</select>'
+      + '<p class="small muted" style="margin:6px 0 12px">Vilken period du har står i '
+      + 'momsregistreringen från Skatteverket. Styr perioderna och deadline-påminnelsen '
+      + 'i momsunderlaget under Fakturor.</p></div>'
       + '<div class="row">'
       + '<div class="field"><label for="s-rot-percent">ROT-avdrag (%)</label>'
       + '<input type="number" id="s-rot-percent" inputmode="decimal" step="1" min="0" max="100" value="'
@@ -208,6 +217,7 @@
           materialMarkup: Number(val(el, '#s-markup')) || 0,
           mileageRate: Number(val(el, '#s-mileage')) || 0,
           calloutFee: Number(val(el, '#s-callout')) || 0,
+          vatPeriod: val(el, '#s-vat-period') || 'kvartal',
           rotPercent: Number(val(el, '#s-rot-percent')) || 0,
           rotMaxPerYear: Number(val(el, '#s-rot-max')) || 0,
           invoicePrefix: val(el, '#s-prefix'),
