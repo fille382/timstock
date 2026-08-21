@@ -154,6 +154,20 @@
   }
 
   function vatCardHTML() {
+    /* Momsbefriad: ingen deklaration, inget underlag, inga deadlines. Kvar
+       blir utgifterna - de behovs for bokforingen och uppfoljningen anda. */
+    if (S.vatExempt()) {
+      var all = S.expenses();
+      return '<div class="section-title">Utgifter</div>'
+        + '<p class="small muted" style="margin:0 0 10px">Momsbefriad — ingen momsdeklaration '
+        + 'behövs. Utgifterna sparas för bokföringen och kvittona. Momsregistrerar du dig '
+        + 'ändras det under Inställningar.</p>'
+        + '<button class="btn btn-block" data-new-expense>+ Ny utgift</button>'
+        + (all.length
+          ? '<div class="list" style="margin-top:10px">' + all.map(expenseItem).join('') + '</div>'
+          : '');
+    }
+
     var range = periodRange(vatQuarter);
     var r = S.vatReport(range.from, range.to, vatBasis);
     var xs = S.expenses({ from: range.from, to: range.to });
@@ -207,18 +221,20 @@
       + '</div>';
 
     if (xs.length) {
-      html += '<div class="list" style="margin-top:10px">' + xs.map(function (x) {
-        return '<button class="item" type="button" data-expense="' + U.esc(x.id) + '">'
-          + '<div class="item-top"><span class="item-title">' + U.esc(x.description) + '</span>'
-          + '<span class="item-amount">' + U.money0(x.gross) + '</span></div>'
-          + '<div class="item-sub"><span>' + U.esc(U.dateShort(x.date)) + '</span>'
-          + '<span class="dot">•</span><span>moms ' + U.money(x.vat) + '</span>'
-          + (x.photoId ? '<span class="dot">•</span><span>📷 kvitto</span>' : '')
-          + '</div></button>';
-      }).join('') + '</div>';
+      html += '<div class="list" style="margin-top:10px">' + xs.map(expenseItem).join('') + '</div>';
     }
 
     return html;
+  }
+
+  function expenseItem(x) {
+    return '<button class="item" type="button" data-expense="' + U.esc(x.id) + '">'
+      + '<div class="item-top"><span class="item-title">' + U.esc(x.description) + '</span>'
+      + '<span class="item-amount">' + U.money0(x.gross) + '</span></div>'
+      + '<div class="item-sub"><span>' + U.esc(U.dateShort(x.date)) + '</span>'
+      + (S.vatExempt() ? '' : '<span class="dot">•</span><span>moms ' + U.money(x.vat) + '</span>')
+      + (x.photoId ? '<span class="dot">•</span><span>📷 kvitto</span>' : '')
+      + '</div></button>';
   }
 
   /* ---------- Utskrift av momsunderlaget ----------
@@ -333,23 +349,31 @@
       + '<input type="text" id="x-desc" placeholder="t.ex. Såg, olja, klinga (Bauhaus)"'
       + ' value="' + U.esc(x ? x.description : '') + '"></div>';
 
+    /* Momsbefriad: ingen ingaende moms att redovisa, sa momsfaltet doljs -
+       kvar ar bara vad kopet kostade. */
+    var exempt = S.vatExempt();
+
     html += '<div class="row">'
-      + '<div class="field"><label for="x-gross">Belopp inkl. moms (kr)</label>'
+      + '<div class="field"><label for="x-gross">' + (exempt ? 'Belopp (kr)' : 'Belopp inkl. moms (kr)')
+      + '</label>'
       + '<input type="text" id="x-gross" inputmode="decimal" autocomplete="off" placeholder="0"'
       + ' value="' + U.esc(x ? String(x.gross).replace('.', ',') : '') + '"></div>'
-      + '<div class="field"><label for="x-vat">Varav moms (kr)</label>'
-      + '<input type="text" id="x-vat" inputmode="decimal" autocomplete="off" placeholder="0"'
-      + ' value="' + U.esc(x ? String(x.vat).replace('.', ',') : '') + '"></div>'
+      + (exempt ? ''
+        : '<div class="field"><label for="x-vat">Varav moms (kr)</label>'
+          + '<input type="text" id="x-vat" inputmode="decimal" autocomplete="off" placeholder="0"'
+          + ' value="' + U.esc(x ? String(x.vat).replace('.', ',') : '') + '"></div>')
       + '</div>';
 
     /* Star momsen inte utlast pa kvittot raknar knapparna fram den ur
        totalbeloppet - moms 25 % ar 20 % AV totalen (25/125), inte 25 %.
        Den frallan slipper man har. */
-    html += '<div class="quick" style="margin:-6px 0 12px">'
-      + '<button type="button" data-vat-rate="25">moms 25 %</button>'
-      + '<button type="button" data-vat-rate="12">moms 12 %</button>'
-      + '<button type="button" data-vat-rate="6">moms 6 %</button>'
-      + '</div>';
+    if (!exempt) {
+      html += '<div class="quick" style="margin:-6px 0 12px">'
+        + '<button type="button" data-vat-rate="25">moms 25 %</button>'
+        + '<button type="button" data-vat-rate="12">moms 12 %</button>'
+        + '<button type="button" data-vat-rate="6">moms 6 %</button>'
+        + '</div>';
+    }
 
     html += '<p class="small muted" style="margin:-4px 0 12px">Ett kvitto = en utgift. '
       + 'Köpte du flera saker: lista dem i beskrivningen och skriv kvittots totalsumma '
@@ -386,7 +410,8 @@
           var date = body.querySelector('#x-date').value;
           var desc = body.querySelector('#x-desc').value.trim();
           var gross = U.parseHours(body.querySelector('#x-gross').value);
-          var vat = U.parseHours(body.querySelector('#x-vat').value);
+          var vatEl = body.querySelector('#x-vat');
+          var vat = vatEl ? U.parseHours(vatEl.value) : 0;
 
           if (!date) { U.toast('Välj datum', true); return; }
           if (!desc) { U.toast('Skriv vad du köpte', true); return; }
@@ -582,10 +607,12 @@
               + U.money(S.fixedPriceOf(p)) + '</span></div>';
           }).join('')
           + billableRows(sel)
-          + '<div class="totals-row"><span class="muted">Summa exkl. moms ('
+          + '<div class="totals-row"><span class="muted">Summa ('
           + lines.length + ' rader)</span><span>' + U.money(sums.subtotal) + '</span></div>'
-          + '<div class="totals-row"><span class="muted">Moms ' + sums.vatRate + '%</span><span>'
-          + U.money(sums.vat) + '</span></div>'
+          + (S.vatExempt()
+            ? '<div class="totals-row"><span class="muted">Momsbefriad</span><span>ingen moms</span></div>'
+            : '<div class="totals-row"><span class="muted">Moms ' + sums.vatRate + '%</span><span>'
+              + U.money(sums.vat) + '</span></div>')
           + rotPreviewRows(sums)
           + '<div class="totals-row grand"><span>Att betala</span><span>' + U.money(sums.total) + '</span></div>'
           + '</div>'
@@ -688,7 +715,8 @@
   function rotPreviewRows(sums) {
     if (sums.mode !== 'rot' || !sums.rotDeduction) return '';
     var r = sums.rot;
-    return '<div class="totals-row"><span class="muted">Arbetskostnad inkl. moms</span><span>'
+    return '<div class="totals-row"><span class="muted">Arbetskostnad'
+      + (S.vatExempt() ? '' : ' inkl. moms') + '</span><span>'
       + U.money(sums.rotBaseInclVat) + '</span></div>'
       + '<div class="totals-row"><span class="muted">ROT-avdrag ' + r.percent + ' %</span><span>−'
       + U.money(sums.rotDeduction) + '</span></div>';
@@ -1209,20 +1237,31 @@
       ? U.round2(Number(inv.subtotal || 0) + Number(inv.vat || 0))
       : Number(inv.gross);
     var rot = Number(inv.rotDeduction || 0);
+    var exempt = !!co.vatExempt;
 
     html += '<div class="inv-sum">'
-      + '<div class="inv-sum-row"><span>Summa exkl. moms</span><span>' + U.money(inv.subtotal) + '</span></div>'
-      + '<div class="inv-sum-row"><span>Moms ' + U.esc(inv.vatRate) + '%</span><span>'
-      + U.money(inv.vat) + '</span></div>'
+      + '<div class="inv-sum-row"><span>' + (exempt ? 'Summa' : 'Summa exkl. moms')
+      + '</span><span>' + U.money(inv.subtotal) + '</span></div>'
+      + (exempt ? ''
+        : '<div class="inv-sum-row"><span>Moms ' + U.esc(inv.vatRate) + '%</span><span>'
+          + U.money(inv.vat) + '</span></div>')
       + (rot
-        ? '<div class="inv-sum-row"><span>Summa inkl. moms</span><span>' + U.money(gross) + '</span></div>'
-          + '<div class="inv-sum-row"><span>Arbetskostnad inkl. moms</span><span>'
+        ? (exempt ? '' : '<div class="inv-sum-row"><span>Summa inkl. moms</span><span>'
+            + U.money(gross) + '</span></div>')
+          + '<div class="inv-sum-row"><span>Arbetskostnad'
+          + (exempt ? '' : ' inkl. moms') + '</span><span>'
           + U.money(inv.rotBaseInclVat) + '</span></div>'
           + '<div class="inv-sum-row"><span>ROT-avdrag ' + U.esc(inv.rotPercent) + ' %</span><span>−'
           + U.money(rot) + '</span></div>'
         : '')
       + '<div class="inv-sum-row total"><span>Att betala</span><span>' + U.money(inv.total) + '</span></div>'
       + '</div>';
+
+    if (exempt) {
+      html += '<div class="inv-flag"><b>Ingen moms debiteras.</b><br>'
+        + 'Säljaren omfattas av undantag från skatteplikt för beskattningsbara personer '
+        + 'med liten årsomsättning (18 kap. mervärdesskattelagen).</div>';
+    }
 
     if (inv.billingMode === 'reverse') {
       html += '<div class="inv-flag"><b>Omvänd betalningsskyldighet för mervärdesskatt gäller.</b><br>'
@@ -1231,7 +1270,8 @@
 
     if (rot) {
       html += '<div class="inv-flag"><b>Rotavdrag enligt fakturamodellen.</b><br>'
-        + 'Arbetskostnad inklusive moms: ' + U.money(inv.rotBaseInclVat) + '. Avdraget är '
+        + 'Arbetskostnad' + (exempt ? '' : ' inklusive moms') + ': '
+        + U.money(inv.rotBaseInclVat) + '. Avdraget är '
         + 'preliminärt — Skatteverket beslutar slutligt utifrån ditt utrymme för skattereduktion. '
         + 'Räcker inte utrymmet faktureras mellanskillnaden i efterhand.</div>';
     }

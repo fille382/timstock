@@ -619,14 +619,18 @@
         + '<input type="text" id="m-markup" inputmode="decimal" autocomplete="off" placeholder="0"'
         + ' value="' + U.esc(markup || '') + '"></div>'
         + '</div>'
-        + '<div class="field"><label for="m-pvat">Moms på inköpet (kr)</label>'
-        + '<input type="text" id="m-pvat" inputmode="decimal" autocomplete="off"'
-        + ' value="' + U.esc(m && m.purchaseVat !== '' && m.purchaseVat !== undefined
-          && m.purchaseVat !== null ? String(m.purchaseVat).replace('.', ',') : '') + '"></div>'
+        /* Momsbefriad: ingen ingaende moms att spara, faltet doljs. */
+        + (S.vatExempt() ? ''
+          : '<div class="field"><label for="m-pvat">Moms på inköpet (kr)</label>'
+            + '<input type="text" id="m-pvat" inputmode="decimal" autocomplete="off"'
+            + ' value="' + U.esc(m && m.purchaseVat !== '' && m.purchaseVat !== undefined
+              && m.purchaseVat !== null ? String(m.purchaseVat).replace('.', ',') : '') + '"></div>')
         + '<p class="small muted" style="margin:-4px 0 4px">Fyll i båda så räknas á-priset ut åt dig. '
-        + 'Inköpspris och moms syns aldrig på fakturan — momsen hamnar i momsunderlaget som '
-        + 'ingående moms. Lämnas momsfältet tomt räknas 25 % av inköpspriset; står det något '
-        + 'annat på kvittot, skriv av kvittot.</p>'
+        + 'Inköpspriset syns aldrig på fakturan.'
+        + (S.vatExempt() ? ''
+          : ' Momsen hamnar i momsunderlaget som ingående moms — lämnas fältet tomt räknas '
+            + '25 % av inköpspriset; står det något annat på kvittot, skriv av kvittot.')
+        + '</p>'
         + '</details>';
     }
 
@@ -684,10 +688,12 @@
           (covered
             ? '<div class="totals-row"><span class="muted">Fastpris</span><span>'
               + 'ingår i priset</span></div>'
-            : '<div class="totals-row"><span class="muted">Belopp exkl. moms</span><span><b>'
+            : '<div class="totals-row"><span class="muted">'
+              + (S.vatExempt() ? 'Belopp' : 'Belopp exkl. moms') + '</span><span><b>'
               + U.money(amount) + '</b></span></div>'
-              + '<div class="totals-row"><span class="muted">Moms ' + vat + '%</span><span>'
-              + U.money(amount * vat / 100) + '</span></div>')
+              + (S.vatExempt() ? ''
+                : '<div class="totals-row"><span class="muted">Moms ' + vat + '%</span><span>'
+                  + U.money(amount * vat / 100) + '</span></div>'))
           + (margin !== null
             ? '<div class="totals-row"><span class="muted">Din marginal</span><span>'
               + U.money(margin) + '</span></div>'

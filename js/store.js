@@ -10,7 +10,10 @@
       version: 1,
       company: {
         name: '', orgnr: '', vatnr: '', address: '', zip: '', city: '',
-        email: '', phone: '', bankgiro: '', iban: '', bic: '', fskatt: true
+        email: '', phone: '', bankgiro: '', iban: '', bic: '', fskatt: true,
+        /* Omsattning under 120 000 kr/ar: ingen moms pa fakturorna, inga
+           momsavdrag, ingen momsdeklaration. */
+        vatExempt: false
       },
       settings: {
         defaultRate: 750,
@@ -460,16 +463,22 @@
      Procentsats och tak ligger i installningarna och inte i koden - riksdagen
      andrar dem med jamna mellanrum. */
 
+  function vatExempt() { return !!data.company.vatExempt; }
+
   function billingModeFor(clientId) {
     var c = client(clientId);
     var m = c && c.billingMode;
-    return (m === 'reverse' || m === 'rot') ? m : 'normal';
+    /* En momsbefriad saljare tillampar inte omvand byggmoms - fakturan gar
+       utan moms i vilket fall, med befrielsen som grund. ROT paverkas inte. */
+    if (m === 'reverse') return vatExempt() ? 'normal' : 'reverse';
+    return m === 'rot' ? 'rot' : 'normal';
   }
 
   function isReverseVat(clientId) { return billingModeFor(clientId) === 'reverse'; }
   function isRotClient(clientId) { return billingModeFor(clientId) === 'rot'; }
 
   function vatRateFor(clientId) {
+    if (vatExempt()) return 0;            // momsbefriad - ingen moms alls
     if (isReverseVat(clientId)) return 0; // kopatan redovisar momsen
     var c = client(clientId);
     if (c && c.vatRate !== null && c.vatRate !== undefined && c.vatRate !== '') return Number(c.vatRate);
@@ -899,6 +908,7 @@
     isFixed: isFixed, isFixedProject: isFixedProject, fixedCoversExtras: fixedCoversExtras,
     openFixedProjects: openFixedProjects, fixedPriceOf: fixedPriceOf, fixedLabourOf: fixedLabourOf,
     suggestedFixedLabour: suggestedFixedLabour,
+    vatExempt: vatExempt,
     billingModeFor: billingModeFor, isReverseVat: isReverseVat, isRotClient: isRotClient,
     rotCeilingFor: rotCeilingFor, rotUsedInYear: rotUsedInYear, rotFor: rotFor,
     isAta: isAta, entryAmount: entryAmount, billableEntry: billableEntry,

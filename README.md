@@ -232,6 +232,26 @@ kunden ser vad som är sträcka och vad som är fast avgift. I CSV:n gäller sam
 uppdelning, vilket gör att `Antal × Á-pris = Belopp` stämmer på varje enskild
 rad.
 
+## Momsbefriad (omsättning under 120 000 kr/år)
+
+Företag med högst 120 000 kr i årsomsättning kan stå utanför momsen helt.
+Bocka i **Momsbefriad** under Inställningar → Ditt företag, så anpassar sig
+appen:
+
+- Fakturorna går **utan moms**, med befrielseraden *"Säljaren omfattas av
+  undantag från skatteplikt för beskattningsbara personer med liten
+  årsomsättning"* i stället för momsrader.
+- **ROT fungerar fortfarande** — det kräver F-skatt, inte momsregistrering —
+  och avdraget räknas då på arbetskostnaden utan moms.
+- Omvänd byggmoms-kunder faktureras som vanliga kunder (en momsbefriad
+  säljare tillämpar inte omvänd moms).
+- Momsunderlaget, deadline-påminnelsen och alla momsfält försvinner. Kvar
+  finns **utgifterna** med kvittofoton — bokföringsskyldigheten gäller ju
+  fortfarande.
+
+Passerar omsättningen 120 000 kr måste företaget momsregistreras — bocka då
+ur, så kommer allt tillbaka.
+
 ## Momsunderlag och utgifter
 
 Längst ner under **Fakturor** finns ett momsunderlag per kvartal — siffrorna

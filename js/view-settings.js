@@ -30,6 +30,11 @@
       + field('co-bic', 'BIC/Swift', co.bic)
       + '<label class="check"><input type="checkbox" id="co-fskatt"' + (co.fskatt ? ' checked' : '') + '>'
       + '<span>Innehar F-skattsedel (visas på fakturan)</span></label>'
+      + '<label class="check"><input type="checkbox" id="co-vatexempt"' + (co.vatExempt ? ' checked' : '') + '>'
+      + '<span>Momsbefriad — omsättning under 120 000 kr/år</span></label>'
+      + '<p class="small muted" style="margin:2px 0 0 34px">Ingen moms på fakturorna (en '
+      + 'befrielserad skrivs ut i stället), inget momsunderlag, ingen deklarationspåminnelse. '
+      + 'Passerar du 120 000 kr i omsättning måste du momsregistrera dig — bocka då ur.</p>'
       + '<button class="btn btn-primary btn-block" data-save-company style="margin-top:12px">Spara företagsuppgifter</button>'
       + '</div>';
 
@@ -203,7 +208,8 @@
           address: val(el, '#co-address'), zip: val(el, '#co-zip'), city: val(el, '#co-city'),
           email: val(el, '#co-email'), phone: val(el, '#co-phone'),
           bankgiro: val(el, '#co-bankgiro'), iban: val(el, '#co-iban'), bic: val(el, '#co-bic'),
-          fskatt: el.querySelector('#co-fskatt').checked
+          fskatt: el.querySelector('#co-fskatt').checked,
+          vatExempt: el.querySelector('#co-vatexempt').checked
         });
         U.toast('Företagsuppgifter sparade');
         return;
