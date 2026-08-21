@@ -267,7 +267,7 @@
       + '<input type="date" id="x-date" value="' + U.esc(x ? x.date : S.todayISO()) + '"></div>';
 
     html += '<div class="field"><label for="x-desc">Vad köpte du? *</label>'
-      + '<input type="text" id="x-desc" placeholder="t.ex. Sticksåg, diesel, mobilabonnemang"'
+      + '<input type="text" id="x-desc" placeholder="t.ex. Såg, olja, klinga (Bauhaus)"'
       + ' value="' + U.esc(x ? x.description : '') + '"></div>';
 
     html += '<div class="row">'
@@ -279,9 +279,10 @@
       + ' value="' + U.esc(x ? String(x.vat).replace('.', ',') : '') + '"></div>'
       + '</div>';
 
-    html += '<p class="small muted" style="margin:-4px 0 12px">Båda beloppen står på kvittot. '
-      + 'Utgiften hamnar aldrig på någon faktura — den finns bara för momsunderlaget '
-      + 'och din uppföljning.</p>';
+    html += '<p class="small muted" style="margin:-4px 0 12px">Ett kvitto = en utgift. '
+      + 'Köpte du flera saker: lista dem i beskrivningen och skriv kvittots totalsumma '
+      + 'och totalmoms — fotot visar ändå detaljerna. Utgiften hamnar aldrig på någon '
+      + 'faktura, den finns bara för momsunderlaget och din uppföljning.</p>';
 
     html += U.photoFieldHTML('Kvitto');
 
