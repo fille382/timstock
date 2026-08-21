@@ -632,6 +632,8 @@
 
     html += ataFieldHTML(m, dis);
 
+    html += U.photoFieldHTML('Kvitto på inköpet');
+
     html += '<div id="m-preview" class="totals small" style="margin:14px 0"></div>';
 
     if (!billed) {
@@ -649,6 +651,9 @@
       var costEl = body.querySelector('#m-cost');
       var markupEl = body.querySelector('#m-markup');
       var pvatEl = body.querySelector('#m-pvat');
+
+      /* Kontrollern behovs i submitMaterial, som bara far body. */
+      body.__photo = U.initPhotoField(body, m ? m.photoId : '');
 
       function updatePreview() {
         toggleAtaField(body);
@@ -760,6 +765,8 @@
       cost: isFinite(cost) ? S.round2(cost) : '',
       markup: isFinite(markup) ? markup : '',
       purchaseVat: isFinite(pvat) && pvat >= 0 ? S.round2(pvat) : '',
+      photoId: body.__photo ? body.__photo.commit(existing ? existing.photoId : '')
+        : (existing ? existing.photoId : ''),
       ata: ataChecked(body)
     });
 

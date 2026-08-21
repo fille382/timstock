@@ -132,6 +132,129 @@
 
   function isSheetOpen() { return sheetEl && !sheetEl.hidden; }
 
+  /* ---------- Kvittofoton ----------
+
+     Ett mobilfoto ar flera MB - alldeles for stort att spara som det ar.
+     Nedskalat till max 1600 px och jpeg blir kvittot ett par hundra KB och
+     fortfarande fullt lasbart. createImageBitmap rattar aven upp bilder
+     tagna med telefonen pa hojden. */
+
+  function shrinkImage(file, maxDim, quality) {
+    maxDim = maxDim || 1600;
+    return createImageBitmap(file).then(function (bmp) {
+      var scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
+      var w = Math.max(1, Math.round(bmp.width * scale));
+      var h = Math.max(1, Math.round(bmp.height * scale));
+      var canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+      return new Promise(function (resolve, reject) {
+        canvas.toBlob(function (b) {
+          if (b) resolve(b); else reject(new Error('Kunde inte koda bilden'));
+        }, 'image/jpeg', quality || 0.8);
+      });
+    });
+  }
+
+  /* Aterandvandbart falt for kvittofoto i formularen. HTML:en laggs in med
+     photoFieldHTML(), och initPhotoField() kopplar upp det och returnerar en
+     kontroller vars commit() anropas vid spara - den lagrar/tar bort fotot
+     och returnerar photoId som ska sparas pa posten. */
+
+  function photoFieldHTML(label) {
+    return '<div class="field"><label>' + esc(label || 'Kvitto') + '</label>'
+      + '<img id="ph-img" class="photo-thumb" hidden alt="Kvittofoto">'
+      + '<div class="btn-row">'
+      + '<label class="btn" style="flex:1;text-align:center">Fota / välj bild'
+      + '<input type="file" id="ph-input" accept="image/*" hidden></label>'
+      + '<button type="button" class="btn" id="ph-save" hidden>Spara till telefonen</button>'
+      + '<button type="button" class="btn" id="ph-remove" hidden>Ta bort foto</button>'
+      + '</div>'
+      + '<p class="small muted" style="margin:6px 0 0">Sparas lokalt i webbläsaren och följer '
+      + 'med i säkerhetskopian. Sedan 1 juli 2024 behöver papperskvittot inte sparas när '
+      + 'uppgifterna finns digitalt.</p>'
+      + '</div>';
+  }
+
+  function initPhotoField(body, existingPhotoId) {
+    var S = global.Store;
+    var state = { blob: null, removed: false, url: null };
+    var input = body.querySelector('#ph-input');
+    var img = body.querySelector('#ph-img');
+    var removeBtn = body.querySelector('#ph-remove');
+    var saveBtn = body.querySelector('#ph-save');
+
+    function show(url) {
+      state.url = url;
+      img.src = url;
+      img.hidden = false;
+      removeBtn.hidden = false;
+      saveBtn.hidden = false;
+    }
+
+    if (existingPhotoId) {
+      S.getPhoto(existingPhotoId).then(function (b) {
+        if (b && !state.blob && !state.removed) show(URL.createObjectURL(b));
+      }).catch(function () { /* fotot saknas - faltet star bara tomt */ });
+    }
+
+    input.addEventListener('change', function () {
+      var f = input.files && input.files[0];
+      input.value = '';
+      if (!f) return;
+      shrinkImage(f).then(function (b) {
+        state.blob = b;
+        state.removed = false;
+        show(URL.createObjectURL(b));
+      }).catch(function (err) {
+        console.error(err);
+        toast('Kunde inte läsa bilden', true);
+      });
+    });
+
+    removeBtn.addEventListener('click', function () {
+      state.blob = null;
+      state.removed = true;
+      state.url = null;
+      img.hidden = true;
+      img.removeAttribute('src');
+      removeBtn.hidden = true;
+      saveBtn.hidden = true;
+    });
+
+    /* Webblasaren far inte skriva fritt i telefonens mappar, men en vanlig
+       nedladdning gar bra - fotot hamnar i Hamtade filer / Downloads. */
+    saveBtn.addEventListener('click', function () {
+      if (!state.url) return;
+      var a = document.createElement('a');
+      a.href = state.url;
+      a.download = 'kvitto-' + toISO(new Date()) + '.jpg';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+
+    /* Anropas vid spara. Returnerar photoId for posten ('' = inget foto). */
+    state.commit = function (currentId) {
+      if (state.removed) {
+        if (currentId) S.deletePhoto(currentId).catch(function () {});
+        return '';
+      }
+      if (state.blob) {
+        var pid = currentId || S.uid();
+        S.savePhoto(pid, state.blob).catch(function (err) {
+          console.error(err);
+          toast('Kunde inte spara fotot', true);
+        });
+        return pid;
+      }
+      return currentId || '';
+    };
+
+    return state;
+  }
+
   /* ---------- Ovrigt ---------- */
 
   function download(filename, text, mime) {
@@ -160,6 +283,7 @@
     esc: esc, money: money, money0: money0, hours: hours, distance: distance, round2: round2,
     dateShort: dateShort, parseISO: parseISO, toISO: toISO, addDays: addDays,
     monthRange: monthRange, monthLabel: monthLabel, parseHours: parseHours,
+    shrinkImage: shrinkImage, photoFieldHTML: photoFieldHTML, initPhotoField: initPhotoField,
     toast: toast, initSheet: initSheet, openSheet: openSheet, closeSheet: closeSheet,
     isSheetOpen: isSheetOpen, download: download, options: options
   };

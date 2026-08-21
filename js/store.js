@@ -339,6 +339,7 @@
   function deleteMaterial(id) {
     var m = material(id);
     if (m && m.invoiceId) return false; // fakturerat material far inte forsvinna tyst
+    if (m && m.photoId) deletePhoto(m.photoId).catch(function () {});
     data.materials = data.materials.filter(function (x) { return x.id !== id; });
     save();
     return true;
@@ -585,7 +586,9 @@
   }
 
   function deleteExpense(id) {
-    data.expenses = data.expenses.filter(function (x) { return x.id !== id; });
+    var x = expense(id);
+    if (x && x.photoId) deletePhoto(x.photoId).catch(function () {});
+    data.expenses = data.expenses.filter(function (e) { return e.id !== id; });
     save();
   }
 
@@ -600,6 +603,81 @@
     var cost = Number(m.cost);
     if (!isFinite(cost) || cost <= 0) return 0;
     return round2(Number(m.qty || 0) * cost * 0.25);
+  }
+
+  /* ---------- Kvittofoton ----------
+
+     Fotona ar for stora for localStorage - en enda bild skulle ata upp en
+     stor del av kvoten och aventyra all annan data. Darfor bor de i
+     IndexedDB, som rymmer langt mer. Posterna (material/utgifter) bar bara
+     ett photoId; sjalva bilden hamtas harifran. */
+
+  var dbPromise = null;
+
+  function photoDB() {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise(function (resolve, reject) {
+      if (!global.indexedDB) { reject(new Error('IndexedDB saknas')); return; }
+      var req = global.indexedDB.open('timstock-photos', 1);
+      req.onupgradeneeded = function () { req.result.createObjectStore('photos'); };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+    return dbPromise;
+  }
+
+  function photoOp(mode, fn) {
+    return photoDB().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('photos', mode);
+        var req = fn(tx.objectStore('photos'));
+        tx.oncomplete = function () { resolve(req ? req.result : undefined); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  function savePhoto(id, blob) {
+    return photoOp('readwrite', function (s) { return s.put(blob, id); });
+  }
+
+  function getPhoto(id) {
+    if (!id) return Promise.resolve(null);
+    return photoOp('readonly', function (s) { return s.get(id); });
+  }
+
+  function deletePhoto(id) {
+    if (!id) return Promise.resolve();
+    return photoOp('readwrite', function (s) { return s.delete(id); });
+  }
+
+  function clearPhotos() {
+    return photoOp('readwrite', function (s) { return s.clear(); });
+  }
+
+  function allPhotos() {
+    return photoDB().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var out = [];
+        var cur = db.transaction('photos', 'readonly').objectStore('photos').openCursor();
+        cur.onsuccess = function () {
+          var c = cur.result;
+          if (!c) { resolve(out); return; }
+          out.push({ id: c.key, blob: c.value });
+          c.continue();
+        };
+        cur.onerror = function () { reject(cur.error); };
+      });
+    });
+  }
+
+  function blobToDataURL(blob) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(r.result); };
+      r.onerror = function () { reject(r.error); };
+      r.readAsDataURL(blob);
+    });
   }
 
   /* ---------- Momsunderlag ----------
@@ -754,15 +832,43 @@
     return JSON.stringify(data, null, 2);
   }
 
+  /* Fullstandig kopia inklusive kvittofoton (som base64). Filen kan bli stor
+     med manga foton, men en backup utan kvittona vore ingen riktig backup. */
+  function exportBackup() {
+    return allPhotos().catch(function () { return []; }).then(function (list) {
+      return Promise.all(list.map(function (p) {
+        return blobToDataURL(p.blob).then(function (durl) {
+          return { id: p.id, data: durl };
+        });
+      }));
+    }).then(function (photos) {
+      var full = JSON.parse(JSON.stringify(data));
+      full.photos = photos;
+      return JSON.stringify(full, null, 2);
+    });
+  }
+
+  /* Datan byts synkront; fotona aterstalls i bakgrunden via promisen. */
   function importJSON(text) {
     var parsed = JSON.parse(text);
     if (!parsed || typeof parsed !== 'object') throw new Error('Filen innehaller ingen giltig data.');
+    var photos = Array.isArray(parsed.photos) ? parsed.photos : [];
     data = migrate(parsed);
     save();
+    return clearPhotos().then(function () {
+      return Promise.all(photos.map(function (p) {
+        return fetch(p.data)
+          .then(function (r) { return r.blob(); })
+          .then(function (b) { return savePhoto(p.id, b); });
+      }));
+    }).catch(function (err) {
+      console.error('Kunde inte aterstalla kvittofoton:', err);
+    });
   }
 
   function resetAll() {
     data = defaults();
+    clearPhotos().catch(function () {});
     save();
   }
 
@@ -787,6 +893,8 @@
     materialPurchaseVat: materialPurchaseVat,
     expenses: expenses, expense: expense, saveExpense: saveExpense, deleteExpense: deleteExpense,
     vatReport: vatReport,
+    savePhoto: savePhoto, getPhoto: getPhoto, deletePhoto: deletePhoto,
+    exportBackup: exportBackup,
     isFixed: isFixed, isFixedProject: isFixedProject, fixedCoversExtras: fixedCoversExtras,
     openFixedProjects: openFixedProjects, fixedPriceOf: fixedPriceOf, fixedLabourOf: fixedLabourOf,
     suggestedFixedLabour: suggestedFixedLabour,

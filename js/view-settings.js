@@ -93,7 +93,7 @@
       + '<div class="totals-row"><span class="muted">Utgifter</span><span>' + d.expenses.length + '</span></div>'
       + '<div class="totals-row"><span class="muted">Fakturor</span><span>' + d.invoices.length + '</span></div>'
       + '</div>'
-      + '<button class="btn btn-block" data-export>Exportera säkerhetskopia (JSON)</button>'
+      + '<button class="btn btn-block" data-export>Exportera säkerhetskopia (JSON, inkl. kvittofoton)</button>'
       + '<button class="btn btn-block" data-export-csv style="margin-top:10px">Exportera tid, material &amp; körjournal (CSV)</button>'
       + '<label class="btn btn-block" style="margin-top:10px">Importera säkerhetskopia'
       + '<input type="file" id="s-import" accept="application/json,.json" hidden></label>'
@@ -219,8 +219,16 @@
       }
 
       if (ev.target.closest('[data-export]')) {
-        U.download('timstock-backup-' + S.todayISO() + '.json', S.exportJSON());
-        U.toast('Säkerhetskopia exporterad');
+        S.exportBackup().then(function (text) {
+          U.download('timstock-backup-' + S.todayISO() + '.json', text);
+          U.toast('Säkerhetskopia exporterad');
+        }).catch(function (err) {
+          /* Kvittofotona gick inte att lasa - exportera hellre datan utan
+             dem an ingenting alls. */
+          console.error(err);
+          U.download('timstock-backup-' + S.todayISO() + '.json', S.exportJSON());
+          U.toast('Exporterad utan kvittofoton');
+        });
         return;
       }
 

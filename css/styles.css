@@ -432,6 +432,17 @@ input:focus, select:focus, textarea:focus {
 .notice-ok { background: var(--ok-soft); border-color: var(--ok); }
 .notice-warn { background: var(--warn-soft); border-color: var(--warn); }
 
+/* Kvittofotots tumnagel i formularen. */
+.photo-thumb {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+}
+
 .ok-text { color: var(--ok); font-weight: 600; }
 .warn-text { color: var(--danger); font-weight: 600; }
 

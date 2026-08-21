@@ -149,8 +149,9 @@
           + '<div class="item-top"><span class="item-title">' + U.esc(x.description) + '</span>'
           + '<span class="item-amount">' + U.money0(x.gross) + '</span></div>'
           + '<div class="item-sub"><span>' + U.esc(U.dateShort(x.date)) + '</span>'
-          + '<span class="dot">•</span><span>moms ' + U.money(x.vat) + '</span></div>'
-          + '</button>';
+          + '<span class="dot">•</span><span>moms ' + U.money(x.vat) + '</span>'
+          + (x.photoId ? '<span class="dot">•</span><span>📷 kvitto</span>' : '')
+          + '</div></button>';
       }).join('') + '</div>';
     }
 
@@ -280,7 +281,9 @@
 
     html += '<p class="small muted" style="margin:-4px 0 12px">Båda beloppen står på kvittot. '
       + 'Utgiften hamnar aldrig på någon faktura — den finns bara för momsunderlaget '
-      + 'och din uppföljning. Spara kvittot!</p>';
+      + 'och din uppföljning.</p>';
+
+    html += U.photoFieldHTML('Kvitto');
 
     html += '<button class="btn btn-primary btn-block" data-save-expense>'
       + (x ? 'Spara utgift' : 'Lägg till utgift') + '</button>';
@@ -291,6 +294,8 @@
     }
 
     U.openSheet(x ? 'Redigera utgift' : 'Ny utgift', html, function (body) {
+      var photo = U.initPhotoField(body, x ? x.photoId : '');
+
       body.addEventListener('click', function (ev) {
         if (ev.target.closest('[data-save-expense]')) {
           var date = body.querySelector('#x-date').value;
@@ -309,7 +314,8 @@
             date: date,
             description: desc,
             gross: S.round2(gross),
-            vat: S.round2(vat)
+            vat: S.round2(vat),
+            photoId: photo.commit(x ? x.photoId : '')
           });
           U.closeSheet();
           U.toast(x ? 'Utgift sparad' : 'Utgift tillagd');

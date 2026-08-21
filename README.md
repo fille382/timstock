@@ -260,6 +260,23 @@ och utgift som ligger bakom siffrorna.
 > Utgifterna och materialmomsen följer med i CSV-exporten (kolumnen
 > *Ingående moms*), så din bokföring eller redovisningskonsult får allt.
 
+### Kvittofoton
+
+Både utgifter och materialposter har ett **Kvitto**-fält: fota kvittot eller
+välj en bild ur galleriet, så sparas det på posten. Sedan 1 juli 2024 behöver
+papperskvittot inte sparas när uppgifterna finns digitalt — fotot kan alltså
+vara hela din kvittopärm.
+
+Bilderna skalas ner till läsbar storlek (max 1600 px) och lagras i
+webbläsarens IndexedDB — inte i `localStorage`, som är för trång för bilder,
+och inte i telefonens mappar, som webbappar inte får skriva till. Knappen
+**Spara till telefonen** laddar ner fotot till Hämtade filer om du vill ha en
+kopia utanför appen, och vill du ha originalet i galleriet: ta bilden med
+kameraappen först och välj den ur galleriet i stället för att fota direkt.
+
+Fotona följer med i JSON-säkerhetskopian (som base64 — filen växer med
+antalet kvitton) och återställs vid import. Tas posten bort tas fotot bort.
+
 ## Säkerhetskopiering
 
 Datan finns **bara i den webbläsare du använder**. Rensar du webbläsardata eller
