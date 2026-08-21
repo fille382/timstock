@@ -52,7 +52,8 @@
     var projs = S.projects(c.id);
     return '<button class="item" type="button" data-client="' + U.esc(c.id) + '">'
       + '<div class="item-top">'
-      + '<span class="item-title">' + U.esc(c.name) + (c.archived ? ' <span class="badge badge-muted">Arkiverad</span>' : '') + '</span>'
+      + '<span class="item-title">' + U.esc(c.name) + modeBadge(c)
+      + (c.archived ? ' <span class="badge badge-muted">Arkiverad</span>' : '') + '</span>'
       + '<span class="item-amount">' + U.money0(S.rateFor(c.id, null)) + '/h</span>'
       + '</div>'
       + '<div class="item-sub">'
@@ -66,6 +67,13 @@
         : '<span>Inget ofakturerat</span>')
       + '</div>'
       + '</button>';
+  }
+
+  function modeBadge(c) {
+    var mode = S.billingModeFor(c.id);
+    if (mode === 'reverse') return ' <span class="badge badge-reverse">Omvänd moms</span>';
+    if (mode === 'rot') return ' <span class="badge badge-rot">ROT</span>';
+    return '';
   }
 
   /* ---------- Kundformulär ---------- */
@@ -101,8 +109,42 @@
       + U.esc(c && c.vatRate !== '' && c.vatRate !== null && c.vatRate !== undefined ? c.vatRate : '')
       + '" placeholder="' + U.esc(s.vatRate) + '"></div></div>';
 
+    var mode = S.billingModeFor(c ? c.id : null);
+
+    html += '<div class="field"><label for="c-mode">Fakturering</label>'
+      + '<select id="c-mode">'
+      + '<option value="normal"' + (mode === 'normal' ? ' selected' : '') + '>Företag – vanlig moms</option>'
+      + '<option value="reverse"' + (mode === 'reverse' ? ' selected' : '') + '>Byggföretag – omvänd byggmoms</option>'
+      + '<option value="rot"' + (mode === 'rot' ? ' selected' : '') + '>Privatperson – ROT-avdrag</option>'
+      + '</select>'
+      + '<p class="small muted" id="c-mode-help" style="margin:6px 0 0">' + modeHelp(mode) + '</p></div>';
+
     html += '<div class="field"><label for="c-orgnr">Organisationsnummer</label>'
       + '<input type="text" id="c-orgnr" value="' + U.esc(c ? c.orgnr : '') + '"></div>';
+
+    html += '<div id="c-reverse-fields"' + (mode === 'reverse' ? '' : ' hidden') + '>'
+      + '<div class="field"><label for="c-vatnr">Kundens momsregistreringsnummer</label>'
+      + '<input type="text" id="c-vatnr" autocapitalize="characters" value="'
+      + U.esc(c ? c.vatnr : '') + '" placeholder="SE556677889901">'
+      + '<p class="small muted" style="margin:6px 0 0">Måste stå på fakturan vid omvänd '
+      + 'byggmoms. Kontrollera att kunden verkligen säljer byggtjänster — annars ska du '
+      + 'fakturera med moms som vanligt.</p></div></div>';
+
+    html += '<div id="c-rot-fields"' + (mode === 'rot' ? '' : ' hidden') + '>'
+      + '<div class="field"><label for="c-rot-personnr">Personnummer</label>'
+      + '<input type="text" id="c-rot-personnr" inputmode="numeric" value="'
+      + U.esc(c ? c.rotPersonnr : '') + '" placeholder="ÅÅÅÅMMDD-XXXX">'
+      + '<p class="small muted" style="margin:6px 0 0">Behövs när du begär utbetalningen '
+      + 'från Skatteverket. Skrivs inte ut på fakturan.</p></div>'
+      + '<div class="row">'
+      + '<div class="field"><label for="c-rot-property">Fastighetsbeteckning</label>'
+      + '<input type="text" id="c-rot-property" value="' + U.esc(c ? c.rotProperty : '') + '"></div>'
+      + '<div class="field" style="flex:0 0 38%"><label for="c-rot-apartment">Lägenhetsnr</label>'
+      + '<input type="text" id="c-rot-apartment" inputmode="numeric" value="'
+      + U.esc(c ? c.rotApartment : '') + '"></div></div>'
+      + '<p class="small muted" style="margin:-6px 0 12px">Fastighetsbeteckning för villa, '
+      + 'lägenhetsnummer och föreningens org.nr för bostadsrätt.</p>'
+      + rotCeilingField(c, s) + '</div>';
 
     html += '<div class="field"><label for="c-address">Adress</label>'
       + '<input type="text" id="c-address" value="' + U.esc(c ? c.address : '') + '"></div>';
@@ -133,6 +175,12 @@
     }
 
     U.openSheet(c ? c.name : 'Ny kund', html, function (body) {
+      syncMode(body);
+
+      body.querySelector('#c-mode').addEventListener('change', function () {
+        syncMode(body);
+      });
+
       body.addEventListener('click', function (ev) {
         if (ev.target.closest('[data-save-client]')) { saveClient(body, c); return; }
         if (ev.target.closest('[data-new-project]')) { openProject(null, c.id); return; }
@@ -157,6 +205,77 @@
         }
       });
     });
+  }
+
+  /* Faltet for kundens ROT-utrymme. Siffran kommer fran kundens Mina sidor
+     hos Skatteverket - det enda stallet dar hela bilden finns, eftersom taket
+     galler over alla utforare kunden anlitat. Darfor ars- och datumstamplas
+     den nar den sparas: nytt ar betyder nytt utrymme, och fakturor som redan
+     var begarda nar kunden kollade ar inraknade i siffran. */
+  function rotCeilingField(c, s) {
+    var year = S.todayISO().slice(0, 4);
+    var stale = c && c.rotCeiling && c.rotCeilingYear
+      && String(c.rotCeilingYear) !== year;
+
+    var html = '<div class="field"><label for="c-rot-ceiling">Kundens ROT-utrymme ' + year
+      + ' (kr)</label>'
+      + '<input type="number" id="c-rot-ceiling" inputmode="numeric" step="100" min="0" value="'
+      + U.esc(c && c.rotCeiling && !stale ? c.rotCeiling : '') + '" placeholder="'
+      + U.esc(s.rotMaxPerYear) + ' (hela taket)">';
+
+    if (stale) {
+      html += '<p class="small warn-text" style="margin:6px 0 0">Den tidigare siffran ('
+        + U.money0(c.rotCeiling) + ') gällde ' + U.esc(c.rotCeilingYear)
+        + ' och används inte längre — nytt år, nytt utrymme. Be kunden kolla igen.</p>';
+    }
+
+    html += '<p class="small muted" style="margin:6px 0 0">Taket gäller allt ROT och RUT '
+      + 'kunden får under året, oavsett vilka som utför jobben — så bara kunden själv kan se '
+      + 'siffran, på Mina sidor hos Skatteverket. Fråga innan jobbet börjar och fyll i här. '
+      + 'Lämnas fältet tomt räknar appen på hela taket och det den själv vet: dina egna '
+      + 'fakturor under året.</p>';
+
+    /* Det appen kan rakna ut pa egen hand - kvar av utrymmet enligt de
+       fakturor den kanner till. */
+    if (c && c.id) {
+      var r = S.rotFor(c.id, 0, 0, null, null);
+      html += '<div class="totals" style="margin-top:10px">'
+        + '<div class="totals-row"><span class="muted">Tak ' + U.esc(r.year)
+        + (r.customCeiling ? ' (kundens uppgift)' : '') + '</span><span>'
+        + U.money0(r.ceiling) + '</span></div>'
+        + (r.used
+          ? '<div class="totals-row"><span class="muted">− dina fakturor</span><span>'
+            + U.money0(r.used) + '</span></div>'
+          : '')
+        + '<div class="totals-row grand"><span>Kvar att dra av</span><span>'
+        + U.money0(r.available) + '</span></div>'
+        + '</div>';
+    }
+
+    return html + '</div>';
+  }
+
+  var MODE_HELP = {
+    normal: 'Vanlig faktura med moms.',
+    reverse: 'Ingen moms på fakturan — kunden redovisar den själv. Gäller bara byggtjänster '
+      + 'till en kund som i sin tur säljer byggtjänster.',
+    rot: 'Kundens del av arbetskostnaden dras direkt på fakturan. Resten begär du från '
+      + 'Skatteverket när kunden betalat.'
+  };
+
+  function modeHelp(mode) { return MODE_HELP[mode] || MODE_HELP.normal; }
+
+  /* Visar bara de falt som det valda fakturerningssattet behover, och slar av
+     momsfaltet vid omvand byggmoms - dar ar satsen alltid noll. */
+  function syncMode(body) {
+    var mode = body.querySelector('#c-mode').value;
+    body.querySelector('#c-mode-help').textContent = modeHelp(mode);
+    body.querySelector('#c-reverse-fields').hidden = mode !== 'reverse';
+    body.querySelector('#c-rot-fields').hidden = mode !== 'rot';
+
+    var vat = body.querySelector('#c-vat');
+    vat.disabled = mode === 'reverse';
+    vat.placeholder = mode === 'reverse' ? '0 (omvänd moms)' : String(S.settings().vatRate);
   }
 
   function projectItem(p) {
@@ -184,6 +303,29 @@
     var name = body.querySelector('#c-name').value.trim();
     if (!name) { U.toast('Kundnamn krävs', true); return; }
 
+    var mode = body.querySelector('#c-mode').value;
+
+    if (mode === 'reverse' && !body.querySelector('#c-vatnr').value.trim()) {
+      U.toast('Omvänd byggmoms kräver kundens momsreg.nr', true);
+      return;
+    }
+
+    /* Utrymmet stamplas med ar och datum sa att det dor vid arsskiftet och
+       sa att redan begarda fakturor inte raknas av dubbelt. Ostord siffra
+       behaller sin gamla stampel - den blir inte farskare av att kundkortet
+       sparas om. */
+    var ceiling = body.querySelector('#c-rot-ceiling').value.trim();
+    var prev = existing || {};
+    var ceilingYear = prev.rotCeilingYear || null;
+    var ceilingDate = prev.rotCeilingDate || null;
+    if (!ceiling) {
+      ceilingYear = null;
+      ceilingDate = null;
+    } else if (ceiling !== String(prev.rotCeiling || '') || !ceilingYear) {
+      ceilingYear = S.todayISO().slice(0, 4);
+      ceilingDate = S.todayISO();
+    }
+
     S.saveClient({
       id: existing ? existing.id : null,
       name: name,
@@ -191,6 +333,14 @@
       phone: body.querySelector('#c-phone').value.trim(),
       rate: body.querySelector('#c-rate').value.trim(),
       vatRate: body.querySelector('#c-vat').value.trim(),
+      billingMode: mode,
+      vatnr: body.querySelector('#c-vatnr').value.trim(),
+      rotPersonnr: body.querySelector('#c-rot-personnr').value.trim(),
+      rotProperty: body.querySelector('#c-rot-property').value.trim(),
+      rotApartment: body.querySelector('#c-rot-apartment').value.trim(),
+      rotCeiling: ceiling,
+      rotCeilingYear: ceilingYear,
+      rotCeilingDate: ceilingDate,
       orgnr: body.querySelector('#c-orgnr').value.trim(),
       address: body.querySelector('#c-address').value.trim(),
       zip: body.querySelector('#c-zip').value.trim(),
@@ -291,6 +441,17 @@
       + '<div class="card-title" style="margin-bottom:8px">Utfall</div>' + rows + '</div>';
   }
 
+  /* Forklarar var ROT-underlaget kommer ifran just for det har jobbet. */
+  function labourHelp(p) {
+    if (p && !p.fixedIncludes) {
+      return 'Material och körning ligger utanför priset, så hela fastpriset räknas som '
+        + 'arbete. Fyll bara i fältet om en del av priset ändå är material.';
+    }
+    return 'Utläggen ingår i priset, så appen kan inte veta hur mycket som är arbete. '
+      + 'Förslaget är fastpriset minus det material och de körningar du bokfört på jobbet. '
+      + 'Uppdelningen ska vara rimlig och gå att styrka — ROT ges bara på arbetet.';
+  }
+
   function openProject(id, clientId) {
     var p = id ? S.project(id) : null;
     var c = S.client(clientId);
@@ -327,6 +488,28 @@
       + (p && p.fixedIncludes ? ' checked' : '') + fixedDis + '>'
       + '<span>Material och körning ingår i priset</span></label>';
 
+    /* Ett fastpris ar en klumpsumma. ROT raknas bara pa arbetet, sa for en
+       ROT-kund maste priset delas upp - men appen kan oftast rakna ut det. */
+    if (S.isRotClient(clientId)) {
+      var suggestion = p ? S.suggestedFixedLabour(p.id) : null;
+      var auto = p && !p.fixedIncludes;
+
+      html += '<div class="field" style="margin-top:14px"><label for="p-fixed-labour">'
+        + 'Varav arbetskostnad (kr)</label>'
+        + '<input type="number" id="p-fixed-labour" inputmode="decimal" step="1" min="0" value="'
+        + U.esc(p && p.fixedLabour ? p.fixedLabour : '') + '" placeholder="'
+        + U.esc(auto ? 'Hela priset — utläggen ingår inte' : 'Anges för ROT-avdrag')
+        + '"' + fixedDis + '>';
+
+      if (suggestion !== null && !billed) {
+        html += '<div class="quick"><button type="button" data-labour-suggest="'
+          + U.esc(suggestion) + '">Använd ' + U.money0(suggestion) + '</button></div>';
+      }
+
+      html += '<p class="small muted" style="margin:6px 0 0" id="p-labour-help">'
+        + labourHelp(p) + '</p></div>';
+    }
+
     if (p) html += outcomeHTML(p);
 
     html += '<button class="btn btn-primary btn-block" data-save-project style="margin-top:14px">'
@@ -341,17 +524,34 @@
     html += '<button class="btn btn-ghost btn-block" data-back style="margin-top:14px">← Tillbaka till kunden</button>';
 
     U.openSheet(p ? p.name : 'Nytt projekt hos ' + (c ? c.name : ''), html, function (body) {
+      /* Kryssrutan avgor om hela priset ar arbete eller inte, sa hjalptexten
+         maste folja med nar den andras. */
+      var includesEl = body.querySelector('#p-fixed-includes');
+      var helpEl = body.querySelector('#p-labour-help');
+      if (helpEl) {
+        includesEl.addEventListener('change', function () {
+          helpEl.textContent = labourHelp({ fixedIncludes: includesEl.checked });
+        });
+      }
+
       body.addEventListener('click', function (ev) {
         if (ev.target.closest('[data-back]')) { openClient(clientId); return; }
+        var sug = ev.target.closest('[data-labour-suggest]');
+        if (sug) {
+          body.querySelector('#p-fixed-labour').value = sug.getAttribute('data-labour-suggest');
+          return;
+        }
         if (ev.target.closest('[data-save-project]')) {
           var name = body.querySelector('#p-name').value.trim();
           if (!name) { U.toast('Projektnamn krävs', true); return; }
+          var labourEl = body.querySelector('#p-fixed-labour');
           S.saveProject({
             id: p ? p.id : null,
             clientId: clientId,
             name: name,
             rate: body.querySelector('#p-rate').value.trim(),
             fixedPrice: body.querySelector('#p-fixed').value.trim(),
+            fixedLabour: labourEl ? labourEl.value.trim() : (p ? p.fixedLabour : ''),
             fixedIncludes: body.querySelector('#p-fixed-includes').checked
           });
           U.toast(p ? 'Projekt sparat' : 'Projekt tillagt');

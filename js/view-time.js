@@ -619,8 +619,14 @@
         + '<input type="text" id="m-markup" inputmode="decimal" autocomplete="off" placeholder="0"'
         + ' value="' + U.esc(markup || '') + '"></div>'
         + '</div>'
+        + '<div class="field"><label for="m-pvat">Moms på inköpet (kr)</label>'
+        + '<input type="text" id="m-pvat" inputmode="decimal" autocomplete="off"'
+        + ' value="' + U.esc(m && m.purchaseVat !== '' && m.purchaseVat !== undefined
+          && m.purchaseVat !== null ? String(m.purchaseVat).replace('.', ',') : '') + '"></div>'
         + '<p class="small muted" style="margin:-4px 0 4px">Fyll i båda så räknas á-priset ut åt dig. '
-        + 'Inköpspriset sparas men syns aldrig på fakturan.</p>'
+        + 'Inköpspris och moms syns aldrig på fakturan — momsen hamnar i momsunderlaget som '
+        + 'ingående moms. Lämnas momsfältet tomt räknas 25 % av inköpspriset; står det något '
+        + 'annat på kvittot, skriv av kvittot.</p>'
         + '</details>';
     }
 
@@ -642,6 +648,7 @@
       var priceEl = body.querySelector('#m-price');
       var costEl = body.querySelector('#m-cost');
       var markupEl = body.querySelector('#m-markup');
+      var pvatEl = body.querySelector('#m-pvat');
 
       function updatePreview() {
         toggleAtaField(body);
@@ -656,6 +663,15 @@
           var cost = U.parseHours(costEl.value);
           if (isFinite(cost) && cost > 0 && isFinite(price)) {
             margin = (price - cost) * (isFinite(qty) ? qty : 0);
+          }
+          /* Forslaget pa inkopsmomsen foljer med i platshallaren - det som
+             faktiskt sparas ar det man skriver, eller 25 % om faltet ar tomt. */
+          if (pvatEl && isFinite(cost) && cost > 0) {
+            var q = isFinite(qty) && qty > 0 ? qty : 1;
+            pvatEl.placeholder = String(S.round2(q * cost * 0.25)).replace('.', ',')
+              + ' (25 %)';
+          } else if (pvatEl) {
+            pvatEl.placeholder = '';
           }
         }
 
@@ -729,6 +745,8 @@
 
     var cost = costEl ? U.parseHours(costEl.value) : NaN;
     var markup = markupEl ? U.parseHours(markupEl.value) : NaN;
+    var pvatEl = body.querySelector('#m-pvat');
+    var pvat = pvatEl ? U.parseHours(pvatEl.value) : NaN;
 
     S.saveMaterial({
       id: existing ? existing.id : null,
@@ -741,6 +759,7 @@
       unitPrice: S.round2(price),
       cost: isFinite(cost) ? S.round2(cost) : '',
       markup: isFinite(markup) ? markup : '',
+      purchaseVat: isFinite(pvat) && pvat >= 0 ? S.round2(pvat) : '',
       ata: ataChecked(body)
     });
 

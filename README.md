@@ -19,7 +19,8 @@ server. All data ligger lokalt i webbläsaren (`localStorage`).
 
 2. Fyll i dina företagsuppgifter under **Inställningar** — de hamnar som
    avsändare på fakturorna.
-3. Lägg upp en kund under **Kunder & projekt** med timpris.
+3. Lägg upp en kund under **Kunder & projekt** med timpris. Välj samtidigt hur
+   kunden ska faktureras — vanlig moms, omvänd byggmoms eller ROT-avdrag.
 4. Registrera tid, material och körningar under **Tidrapport**.
 5. Skapa faktura under **Fakturor**.
 
@@ -99,6 +100,91 @@ tilläggsarbeten fått det avtalade jobbet att se bättre ut än det var.
 En ÄTA som registreras **efter** att fastpriset fakturerats ligger kvar som
 ofakturerad och kan tas på nästa faktura.
 
+## Momsläge: vanlig moms, omvänd byggmoms eller ROT
+
+Varje kund faktureras på ett av tre sätt. Valet görs under **Fakturering** i
+kundformuläret och styr både momsen och vad som skrivs ut på fakturan.
+
+**Företag – vanlig moms.** Standard. Momssatsen tas från kunden om den är
+ifylld, annars från Inställningar.
+
+**Byggföretag – omvänd byggmoms.** Fakturan går utan moms — köparen redovisar
+den själv. Gäller byggtjänster till en kund som i sin tur säljer byggtjänster.
+Kundens **momsregistreringsnummer** blir obligatoriskt, eftersom det är ett
+formkrav på fakturan, och appen vägrar spara kunden eller skapa fakturan utan
+det. På utskriften hamnar numret hos mottagaren tillsammans med den lagstadgade
+texten *"Omvänd betalningsskyldighet för mervärdesskatt gäller."*
+
+**Privatperson – ROT-avdrag.** Kundens del dras direkt på fakturan enligt
+fakturamodellen, och resten begär du från Skatteverket. Se nedan.
+
+## ROT-avdrag
+
+Avdraget räknas på **arbetskostnaden inklusive moms** — aldrig på material,
+mil eller framkörningsavgift. Varje fakturarad bär därför med sig sin
+arbetskostnad, och bara tidsposter räknas in.
+
+### ROT på fastprisjobb
+
+Fastprisjobb ger ROT precis som löpande räkning — men bara på arbetsdelen, och
+ett fastpris är en klumpsumma. Hur appen delar upp den beror på kryssrutan
+**Material och körning ingår i priset**:
+
+- **Ingår inte** — då är hela fastpriset arbete, och avdraget räknas
+  automatiskt. Materialet faktureras ju ändå som egna rader.
+- **Ingår** — då kan vad som helst ligga i klumpen, och appen frågar. På
+  projektet dyker fältet **Varav arbetskostnad** upp med en knapp som fyller i
+  fastpriset minus det material och de körningar du bokfört på jobbet. Skapar
+  du fakturan utan att ha svarat säger appen till i stället för att tyst ge noll
+  i avdrag.
+
+Förslaget bygger på dina egna siffror och går därför att förklara i efterhand,
+men det förutsätter att materialet faktiskt är inregistrerat på projektet.
+Uppdelningen ska vara rimlig och gå att styrka — siffran är din, inte appens.
+
+Procentsats och tak sätts under **Inställningar → Standardvärden**. De ligger
+där och inte i koden av en anledning:
+
+> **Riksdagen har ändrat både procentsatsen och taket flera gånger de senaste
+> åren.** Appen har inget inbyggt facit — kolla aktuella siffror hos
+> Skatteverket och lägg in dem själv.
+
+### Kundens utrymme — vad appen kan och inte kan veta
+
+Appen håller själv reda på vad **dina** fakturor dragit på kunden under året
+och varnar när utrymmet håller på att ta slut — då hamnar mellanskillnaden på
+kundens faktura i stället. Avdraget räknas mot det år kunden **betalar**, inte
+fakturadatumet, så en decemberfaktura som betalas i januari belastar det nya
+årets utrymme.
+
+Vad kunden fått i ROT och RUT **hos andra utförare** kan ingen app se — taket
+gäller per person och år över alla jobb, och den siffran finns bara på kundens
+egna Mina sidor hos Skatteverket. Be kunden kolla innan jobbet börjar och fyll
+i beloppet under **Kundens ROT-utrymme** på kundkortet. Siffran års- och
+datumstämplas när den sparas: vid årsskiftet slutar den gälla (nytt år, nytt
+utrymme — appen säger till), och fakturor du redan hunnit begära när kunden
+kollade räknas inte av en gång till. Kundkortet visar hela tiden taket, dina
+fakturors avdrag och vad som är kvar.
+
+Avdraget är ändå alltid preliminärt — Skatteverket gör den slutliga
+bedömningen mot kundens faktiska skatt när du begär utbetalningen.
+
+På fakturan skrivs arbetskostnaden inklusive moms ut, avdraget som egen rad,
+och en not om att avdraget är preliminärt tills Skatteverket beslutat.
+
+### Begära utbetalningen
+
+I fakturan finns en ruta **ROT-underlag** med allt du behöver skriva in i
+Skatteverkets e-tjänst: köparens personnummer, fastighetsbeteckning eller
+lägenhetsnummer, arbetskostnad inklusive moms, fakturanummer, betaldatum och
+begärt belopp. Personnumret sparas på kunden men **skrivs aldrig ut på
+fakturan**.
+
+Begär utbetalningen först när kunden betalat sin del — markera fakturan som
+**Betald**, så försvinner varningen. Tryck sedan **Markera som begärd hos
+Skatteverket**. På fakturalistan visar rutan **ROT att söka** hur mycket du
+dragit av men ännu inte bett om.
+
 ## Filtrera och fakturera per projekt
 
 I **Tidrapporten** kan du filtrera på kund, och när en kund är vald dyker ett
@@ -145,6 +231,34 @@ På fakturan blir milen och framkörningsavgiften **två skilda rader**, så att
 kunden ser vad som är sträcka och vad som är fast avgift. I CSV:n gäller samma
 uppdelning, vilket gör att `Antal × Á-pris = Belopp` stämmer på varje enskild
 rad.
+
+## Momsunderlag och utgifter
+
+Längst ner under **Fakturor** finns ett momsunderlag per kvartal — siffrorna
+deklarationen frågar efter, så långt appen kan se dem:
+
+- **Utgående moms** och **försäljning exkl. moms** från fakturorna, med
+  omvänd byggmoms-försäljning på egen rad (den redovisas i en egen ruta,
+  utan moms).
+- **Ingående moms på material**: momsen följer med inköpspriset. Skriv av
+  kvittots momsbelopp i fältet **Moms på inköpet**, eller lämna tomt så
+  räknas 25 % av inköpspriset — byggmaterial är 25 % så när som alltid.
+- **Ingående moms på utgifter**: inköp som inte hör till något uppdrag —
+  verktyg, drivmedel, telefon — läggs in som **utgifter** direkt i
+  momsunderlaget: belopp och moms rakt av kvittot. De hamnar aldrig på någon
+  faktura.
+
+Växeln **Fakturadatum/Betaldatum** ska följa metoden i din momsregistrering
+hos Skatteverket (faktureringsmetoden respektive bokslutsmetoden).
+
+**Skriv ut / PDF** ger en sida att ha framför sig när deklarationen fylls i:
+summorna överst och därunder specifikationen — varje faktura, materialinköp
+och utgift som ligger bakom siffrorna.
+
+> Underlaget ersätter inte bokföringen. Det räknar bara det du lagt in i
+> appen, och varje siffra ska ha ett kvitto bakom sig — sparat i 7 år.
+> Utgifterna och materialmomsen följer med i CSV-exporten (kolumnen
+> *Ingående moms*), så din bokföring eller redovisningskonsult får allt.
 
 ## Säkerhetskopiering
 

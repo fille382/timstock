@@ -20,14 +20,17 @@
         mileageRate: 25,
         calloutFee: 0,
         invoicePrefix: '',
-        nextInvoiceNumber: 1
+        nextInvoiceNumber: 1,
+        rotPercent: 30,
+        rotMaxPerYear: 50000
       },
       clients: [],
       projects: [],
       entries: [],
       materials: [],
       trips: [],
-      invoices: []
+      invoices: [],
+      expenses: []
     };
   }
 
@@ -55,6 +58,7 @@
     d.materials = Array.isArray(raw.materials) ? raw.materials : [];
     d.trips = Array.isArray(raw.trips) ? raw.trips : [];
     d.invoices = Array.isArray(raw.invoices) ? raw.invoices : [];
+    d.expenses = Array.isArray(raw.expenses) ? raw.expenses : [];
     return d;
   }
 
@@ -202,6 +206,38 @@
 
   function fixedPriceOf(p) {
     return isFixedProject(p) ? round2(Number(p.fixedPrice)) : 0;
+  }
+
+  /* ROT raknas bara pa arbetskostnaden, sa ett fastpris maste delas upp i
+     arbete och ovrigt. Har du skrivit in delen sjalv galler den. Annars:
+
+       Ingar inte utlaggen i priset  ->  hela priset ar arbete.
+       Ingar de                      ->  vad som helst kan ligga i klumpen,
+                                         och da behovs en siffra fran dig. */
+  function fixedLabourOf(p) {
+    if (!isFixedProject(p)) return 0;
+    var v = p.fixedLabour;
+    if (v !== '' && v !== null && v !== undefined && isFinite(Number(v))) {
+      return Math.min(round2(Number(v)), fixedPriceOf(p));
+    }
+    return p.fixedIncludes ? 0 : fixedPriceOf(p);
+  }
+
+  /* Forslag pa uppdelningen: fastpriset minus de utlagg som faktiskt bokforts
+     pa jobbet. Bygger pa dina egna siffror, sa den gar att forsvara for
+     Skatteverket - men den forutsatter att materialet ar inregistrerat. */
+  function suggestedFixedLabour(projectId) {
+    var p = project(projectId);
+    if (!isFixedProject(p)) return null;
+    if (!p.fixedIncludes) return fixedPriceOf(p);
+
+    var notAta = function (o) { return !isAta(o); };
+    var extras = materials({ projectId: projectId }).filter(notAta)
+      .reduce(function (s, m) { return s + materialAmount(m); }, 0)
+      + trips({ projectId: projectId }).filter(notAta)
+        .reduce(function (s, t) { return s + tripAmount(t); }, 0);
+
+    return Math.max(0, round2(fixedPriceOf(p) - extras));
   }
 
   /* ---------- Tidsposter ---------- */
@@ -408,10 +444,213 @@
     return Number(data.settings.defaultRate) || 0;
   }
 
+  /* ---------- Momslage och ROT ----------
+
+     En kund faktureras pa ett av tre satt:
+
+       normal   Vanlig moms.
+       reverse  Omvand byggmoms. Saljaren satter ingen moms alls, kopatan
+                redovisar den sjalv. Galler byggtjanster till en kopare som
+                sjalv saljer byggtjanster.
+       rot      Privatperson med ROT-avdrag. Kundens del av arbetskostnaden
+                dras direkt pa fakturan och resten begars fran Skatteverket.
+
+     Procentsats och tak ligger i installningarna och inte i koden - riksdagen
+     andrar dem med jamna mellanrum. */
+
+  function billingModeFor(clientId) {
+    var c = client(clientId);
+    var m = c && c.billingMode;
+    return (m === 'reverse' || m === 'rot') ? m : 'normal';
+  }
+
+  function isReverseVat(clientId) { return billingModeFor(clientId) === 'reverse'; }
+  function isRotClient(clientId) { return billingModeFor(clientId) === 'rot'; }
+
   function vatRateFor(clientId) {
+    if (isReverseVat(clientId)) return 0; // kopatan redovisar momsen
     var c = client(clientId);
     if (c && c.vatRate !== null && c.vatRate !== undefined && c.vatRate !== '') return Number(c.vatRate);
     return Number(data.settings.vatRate) || 0;
+  }
+
+  /* Har kunden ett eget angivet utrymme som galler for det har aret?
+
+     Utrymmet ar en ogonblicksbild fran Skatteverkets Mina sidor och stamplas
+     med ar och datum nar det skrivs in. Vid arsskiftet borjar kunden om pa
+     hela taket, sa en siffra fran forra aret sager inget - da faller appen
+     tillbaka pa taket fran installningarna. */
+  function customCeiling(c, year) {
+    if (!c) return null;
+    var own = c.rotCeiling;
+    if (own === '' || own === null || own === undefined || !(Number(own) > 0)) return null;
+    if (String(c.rotCeilingYear || '') !== String(year)) return null;
+    return Number(own);
+  }
+
+  function rotCeilingFor(clientId, year) {
+    var own = customCeiling(client(clientId), year || yearOf(todayISO()));
+    if (own !== null) return own;
+    return Number(data.settings.rotMaxPerYear) || 0;
+  }
+
+  function yearOf(iso) { return String(iso || '').slice(0, 4); }
+
+  /* Vad kunden redan fatt i ROT pa vara fakturor samma ar. Ingen full koll -
+     kunden kan ha anlitat andra hantverkare - men den fangar det vanligaste
+     felet: att sitt eget tak spricker mitt i ett langt jobb.
+
+     Avdraget hor till det ar da kunden BETALADE, inte da fakturan skrevs. En
+     faktura fran december som betalas i januari belastar alltsa nya aret. For
+     en obetald faktura ar fakturadatumet basta gissningen. */
+  function rotYearOf(inv) {
+    return yearOf(inv.paidDate || inv.issueDate);
+  }
+
+  /* skipClaimedThrough: hoppa over fakturor som redan var begarda hos
+     Skatteverket det datumet. Anvands nar kunden lamnat en siffra fran Mina
+     sidor - dar ar de begarda fakturorna redan borttraknade, och att dra av
+     dem en gang till skulle strypa avdraget i onodan. */
+  function rotUsedInYear(clientId, year, excludeInvoiceId, skipClaimedThrough) {
+    return round2(data.invoices.reduce(function (s, i) {
+      if (i.clientId !== clientId) return s;
+      if (excludeInvoiceId && i.id === excludeInvoiceId) return s;
+      if (rotYearOf(i) !== String(year)) return s;
+      if (skipClaimedThrough && i.rotClaimedDate && i.rotClaimedDate <= skipClaimedThrough) return s;
+      return s + Number(i.rotDeduction || 0);
+    }, 0));
+  }
+
+  /* Avdraget pa en faktura: procent av arbetskostnaden INKLUSIVE moms,
+     nedrundat till hela kronor och begransat av arets aterstaende utrymme. */
+  function rotFor(clientId, labourExVat, vatRate, issueDate, excludeInvoiceId) {
+    var percent = Number(data.settings.rotPercent) || 0;
+    var base = round2(Number(labourExVat) || 0);
+    var baseInclVat = round2(base * (1 + (Number(vatRate) || 0) / 100));
+
+    var year = yearOf(issueDate || todayISO());
+    var c = client(clientId);
+    var own = customCeiling(c, year);
+    var ceiling = own !== null ? own : (Number(data.settings.rotMaxPerYear) || 0);
+    var used = rotUsedInYear(clientId, year, excludeInvoiceId,
+      own !== null ? (c.rotCeilingDate || null) : null);
+
+    var available = Math.max(0, round2(ceiling - used));
+    var raw = Math.max(0, Math.floor(baseInclVat * percent / 100));
+    var deduction = Math.min(raw, available);
+    return {
+      percent: percent, base: base, baseInclVat: baseInclVat,
+      year: year, customCeiling: own !== null,
+      ceiling: ceiling, used: used, available: available,
+      raw: raw, deduction: deduction, capped: raw > available
+    };
+  }
+
+  /* ---------- Utgifter ----------
+
+     Utgifter ar inkop som INTE hor till nagot uppdrag - verktyg, drivmedel,
+     telefon. De hamnar aldrig pa nagon faktura; de finns bara for att momsen
+     pa dem ska komma med i momsunderlaget. Belopp och moms skrivs av rakt
+     fran kvittot, sa inga antaganden om momssats behovs. */
+
+  function expenses(filter) {
+    filter = filter || {};
+    return data.expenses
+      .filter(function (x) {
+        if (filter.from && x.date < filter.from) return false;
+        if (filter.to && x.date > filter.to) return false;
+        return true;
+      })
+      .sort(function (a, b) {
+        if (a.date !== b.date) return b.date < a.date ? -1 : 1;
+        return (b.createdAt || '') < (a.createdAt || '') ? -1 : 1;
+      });
+  }
+
+  function expense(id) {
+    return data.expenses.find(function (x) { return x.id === id; }) || null;
+  }
+
+  function saveExpense(x) {
+    if (x.id) {
+      var i = data.expenses.findIndex(function (e) { return e.id === x.id; });
+      if (i >= 0) data.expenses[i] = Object.assign({}, data.expenses[i], x);
+    } else {
+      x.id = uid();
+      x.createdAt = new Date().toISOString();
+      data.expenses.push(x);
+    }
+    save();
+    return x.id;
+  }
+
+  function deleteExpense(id) {
+    data.expenses = data.expenses.filter(function (x) { return x.id !== id; });
+    save();
+  }
+
+  /* Momsen pa ett materialinkop. Angiven siffra galler; saknas den raknas
+     25 % pa inkopspriset - byggmaterial ar 25 % sa nar som alltid. Star det
+     nagot annat pa kvittot ar det bara att skriva in det pa posten. */
+  function materialPurchaseVat(m) {
+    var v = m.purchaseVat;
+    if (v !== '' && v !== null && v !== undefined && isFinite(Number(v))) {
+      return round2(Number(v));
+    }
+    var cost = Number(m.cost);
+    if (!isFinite(cost) || cost <= 0) return 0;
+    return round2(Number(m.qty || 0) * cost * 0.25);
+  }
+
+  /* ---------- Momsunderlag ----------
+
+     Summorna som momsdeklarationen fragar efter, sa langt appen kan se dem:
+     utgaende moms fran fakturorna, ingaende fran materialinkop och utgifter.
+
+     basis 'faktura' = momsen hor till fakturadatumet (faktureringsmetoden),
+     basis 'betald'  = till betaldatumet (kontantmetoden). Vilken som galler
+     star i foretagets registrering hos Skatteverket. */
+
+  function vatReport(from, to, basis) {
+    var inRange = function (d) { return d && (!from || d >= from) && (!to || d <= to); };
+
+    var out = {
+      salesNormal: 0, vatOut: 0, salesReverse: 0, invoiceCount: 0,
+      vatInMaterials: 0, materialCount: 0,
+      vatInExpenses: 0, expenseCount: 0
+    };
+
+    data.invoices.forEach(function (inv) {
+      var d = basis === 'betald' ? inv.paidDate : inv.issueDate;
+      if (!inRange(d)) return;
+      out.invoiceCount++;
+      if (inv.billingMode === 'reverse') {
+        out.salesReverse += Number(inv.subtotal || 0);
+      } else {
+        out.salesNormal += Number(inv.subtotal || 0);
+        out.vatOut += Number(inv.vat || 0);
+      }
+    });
+
+    data.materials.forEach(function (m) {
+      if (!inRange(m.date)) return;
+      var v = materialPurchaseVat(m);
+      if (!v) return;
+      out.vatInMaterials += v;
+      out.materialCount++;
+    });
+
+    data.expenses.forEach(function (x) {
+      if (!inRange(x.date)) return;
+      out.vatInExpenses += Number(x.vat || 0);
+      out.expenseCount++;
+    });
+
+    ['salesNormal', 'vatOut', 'salesReverse', 'vatInMaterials', 'vatInExpenses']
+      .forEach(function (k) { out[k] = round2(out[k]); });
+    out.vatIn = round2(out.vatInMaterials + out.vatInExpenses);
+    out.net = round2(out.vatOut - out.vatIn);
+    return out;
   }
 
   /* ---------- Fakturor ---------- */
@@ -458,6 +697,14 @@
     });
     save();
     return inv;
+  }
+
+  /* Har vi begart utbetalningen av ROT-delen fran Skatteverket an? */
+  function setInvoiceRotClaimed(id, claimed) {
+    var inv = invoice(id);
+    if (!inv) return;
+    inv.rotClaimedDate = claimed ? (inv.rotClaimedDate || todayISO()) : null;
+    save();
   }
 
   function setInvoiceStatus(id, status) {
@@ -537,13 +784,20 @@
     trips: trips, trip: trip, saveTrip: saveTrip, deleteTrip: deleteTrip,
     tripAmount: tripAmount, tripDistanceAmount: tripDistanceAmount,
     deleteMaterial: deleteMaterial, materialAmount: materialAmount,
+    materialPurchaseVat: materialPurchaseVat,
+    expenses: expenses, expense: expense, saveExpense: saveExpense, deleteExpense: deleteExpense,
+    vatReport: vatReport,
     isFixed: isFixed, isFixedProject: isFixedProject, fixedCoversExtras: fixedCoversExtras,
-    openFixedProjects: openFixedProjects, fixedPriceOf: fixedPriceOf,
+    openFixedProjects: openFixedProjects, fixedPriceOf: fixedPriceOf, fixedLabourOf: fixedLabourOf,
+    suggestedFixedLabour: suggestedFixedLabour,
+    billingModeFor: billingModeFor, isReverseVat: isReverseVat, isRotClient: isRotClient,
+    rotCeilingFor: rotCeilingFor, rotUsedInYear: rotUsedInYear, rotFor: rotFor,
     isAta: isAta, entryAmount: entryAmount, billableEntry: billableEntry,
     billableMaterial: billableMaterial, billableTrip: billableTrip,
     rateFor: rateFor, vatRateFor: vatRateFor, round2: round2,
     invoices: invoices, invoice: invoice, createInvoice: createInvoice, peekInvoiceNumber: peekInvoiceNumber,
-    setInvoiceStatus: setInvoiceStatus, deleteInvoice: deleteInvoice,
+    setInvoiceStatus: setInvoiceStatus, setInvoiceRotClaimed: setInvoiceRotClaimed,
+    deleteInvoice: deleteInvoice,
     company: company, settings: settings, saveCompany: saveCompany, saveSettings: saveSettings,
     exportJSON: exportJSON, importJSON: importJSON, resetAll: resetAll
   };

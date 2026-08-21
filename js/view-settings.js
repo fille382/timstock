@@ -60,6 +60,18 @@
       + 'att ändra per resa. Kolla aktuell skattefri milersättning hos Skatteverket — beloppet '
       + 'ändras med jämna mellanrum.</p>'
       + '<div class="row">'
+      + '<div class="field"><label for="s-rot-percent">ROT-avdrag (%)</label>'
+      + '<input type="number" id="s-rot-percent" inputmode="decimal" step="1" min="0" max="100" value="'
+      + U.esc(s.rotPercent) + '"></div>'
+      + '<div class="field"><label for="s-rot-max">ROT-tak per år (kr)</label>'
+      + '<input type="number" id="s-rot-max" inputmode="numeric" step="1000" min="0" value="'
+      + U.esc(s.rotMaxPerYear) + '"></div>'
+      + '</div>'
+      + '<p class="small muted" style="margin:-6px 0 12px">Gäller kunder du fakturerar med '
+      + 'ROT-avdrag. Procentsatsen räknas på arbetskostnaden inklusive moms, och taket gäller '
+      + 'per person och år. <b>Kolla aktuella siffror hos Skatteverket</b> — riksdagen har '
+      + 'ändrat både procent och tak flera gånger de senaste åren.</p>'
+      + '<div class="row">'
       + '<div class="field"><label for="s-prefix">Fakturanr-prefix</label>'
       + '<input type="text" id="s-prefix" value="' + U.esc(s.invoicePrefix) + '" placeholder="t.ex. 2026-"></div>'
       + '<div class="field"><label for="s-next">Nästa nummer</label>'
@@ -78,6 +90,7 @@
       + '<div class="totals-row"><span class="muted">Tidsposter</span><span>' + d.entries.length + '</span></div>'
       + '<div class="totals-row"><span class="muted">Materialposter</span><span>' + d.materials.length + '</span></div>'
       + '<div class="totals-row"><span class="muted">Körningar</span><span>' + d.trips.length + '</span></div>'
+      + '<div class="totals-row"><span class="muted">Utgifter</span><span>' + d.expenses.length + '</span></div>'
       + '<div class="totals-row"><span class="muted">Fakturor</span><span>' + d.invoices.length + '</span></div>'
       + '</div>'
       + '<button class="btn btn-block" data-export>Exportera säkerhetskopia (JSON)</button>'
@@ -111,22 +124,23 @@
      stämmer på varje enskild rad. */
   function csv() {
     var rows = [['Datum', 'Typ', 'ÄTA', 'Kund', 'Projekt', 'Antal', 'Enhet', 'Á-pris',
-      'Belopp', 'Beskrivning', 'Från', 'Till', 'Inköpspris', 'Faktura']];
+      'Belopp', 'Beskrivning', 'Från', 'Till', 'Inköpspris', 'Ingående moms', 'Faktura']];
 
-    function row(o, typ, qty, unit, rate, amount, text, from, to, cost) {
+    function row(o, typ, qty, unit, rate, amount, text, from, to, cost, inVat) {
       var c = S.client(o.clientId);
       var p = o.projectId ? S.project(o.projectId) : null;
       var inv = o.invoiceId ? S.invoice(o.invoiceId) : null;
       rows.push([
         o.date, typ, S.isAta(o) ? 'Ja' : '', c ? c.name : '', p ? p.name : '',
         dec(qty), unit, dec(rate), dec(U.round2(amount)),
-        text || '', from || '', to || '', dec(cost), inv ? inv.number : ''
+        text || '', from || '', to || '', dec(cost), dec(inVat), inv ? inv.number : ''
       ]);
     }
 
     var all = S.entries().map(function (e) { return { type: 'Tid', o: e }; })
       .concat(S.materials().map(function (m) { return { type: 'Material', o: m }; }))
       .concat(S.trips().map(function (t) { return { type: 'Körning', o: t }; }))
+      .concat(S.expenses().map(function (x) { return { type: 'Utgift', o: x }; }))
       .sort(function (a, b) { return a.o.date < b.o.date ? -1 : (a.o.date > b.o.date ? 1 : 0); });
 
     all.forEach(function (it) {
@@ -139,8 +153,17 @@
       }
 
       if (it.type === 'Material') {
+        var pv = S.materialPurchaseVat(o);
         row(o, 'Material', o.qty, o.unit || 'st', o.unitPrice,
-          S.materialAmount(o), o.description, '', '', o.cost);
+          S.materialAmount(o), o.description, '', '', o.cost, pv || '');
+        return;
+      }
+
+      /* Utgifter: belopp inkl. moms i beloppskolumnen, momsen for sig.
+         Kund, projekt och faktura ar alltid tomma - de hor inte till nagot
+         uppdrag. */
+      if (it.type === 'Utgift') {
+        row(o, 'Utgift', 1, 'st', '', o.gross, o.description, '', '', '', o.vat);
         return;
       }
 
@@ -185,6 +208,8 @@
           materialMarkup: Number(val(el, '#s-markup')) || 0,
           mileageRate: Number(val(el, '#s-mileage')) || 0,
           calloutFee: Number(val(el, '#s-callout')) || 0,
+          rotPercent: Number(val(el, '#s-rot-percent')) || 0,
+          rotMaxPerYear: Number(val(el, '#s-rot-max')) || 0,
           invoicePrefix: val(el, '#s-prefix'),
           nextInvoiceNumber: Math.max(1, Number(val(el, '#s-next')) || 1)
         });
