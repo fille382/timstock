@@ -465,6 +465,28 @@
 
   function vatExempt() { return !!data.company.vatExempt; }
 
+  /* Momsbefrielsens tak. Hojdes senast 1 januari 2025 (80 000 -> 120 000);
+     andrar riksdagen det igen ar det har siffran som ska uppdateras. */
+  var VAT_EXEMPT_LIMIT = 120000;
+
+  /* Hur nara taket arets fakturering ligger. Omsattningen raknas pa
+     kalenderaret och fakturadatumen - aven utkast raknas med, for en skriven
+     faktura ar en gjord affar och det ar battre att varna for tidigt an for
+     sent. */
+  function vatExemptStatus() {
+    var year = yearOf(todayISO());
+    var used = round2(data.invoices.reduce(function (s, i) {
+      return yearOf(i.issueDate) === year ? s + Number(i.subtotal || 0) : s;
+    }, 0));
+    return {
+      limit: VAT_EXEMPT_LIMIT,
+      used: used,
+      left: Math.max(0, round2(VAT_EXEMPT_LIMIT - used)),
+      share: used / VAT_EXEMPT_LIMIT,
+      year: year
+    };
+  }
+
   function billingModeFor(clientId) {
     var c = client(clientId);
     var m = c && c.billingMode;
@@ -908,7 +930,7 @@
     isFixed: isFixed, isFixedProject: isFixedProject, fixedCoversExtras: fixedCoversExtras,
     openFixedProjects: openFixedProjects, fixedPriceOf: fixedPriceOf, fixedLabourOf: fixedLabourOf,
     suggestedFixedLabour: suggestedFixedLabour,
-    vatExempt: vatExempt,
+    vatExempt: vatExempt, vatExemptStatus: vatExemptStatus,
     billingModeFor: billingModeFor, isReverseVat: isReverseVat, isRotClient: isRotClient,
     rotCeilingFor: rotCeilingFor, rotUsedInYear: rotUsedInYear, rotFor: rotFor,
     isAta: isAta, entryAmount: entryAmount, billableEntry: billableEntry,

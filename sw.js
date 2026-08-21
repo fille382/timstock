@@ -1,5 +1,5 @@
 /* sw.js - cachar appens filer sa den fungerar utan tackning ute pa faltet. */
-var CACHE = 'timstock-v19';
+var CACHE = 'timstock-v20';
 
 var ASSETS = [
   './',

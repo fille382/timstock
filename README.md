@@ -249,8 +249,11 @@ appen:
   finns **utgifterna** med kvittofoton — bokföringsskyldigheten gäller ju
   fortfarande.
 
-Passerar omsättningen 120 000 kr måste företaget momsregistreras — bocka då
-ur, så kommer allt tillbaka.
+Appen räknar årets fakturering mot taket: en stillsam räknare visas i
+utgiftskortet, en gul varning från 75 % (90 000 kr), och en skarp uppmaning
+när taket passerats. Passerar omsättningen 120 000 kr måste företaget
+momsregistreras — bocka då ur, så kommer allt tillbaka. (Taket höjdes senast
+1 januari 2025; ändras det igen är det `VAT_EXEMPT_LIMIT` i `js/store.js`.)
 
 ## Momsunderlag och utgifter
 

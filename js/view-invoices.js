@@ -57,6 +57,8 @@
         : '')
       + '</div>';
 
+    html += vatExemptWarning();
+
     if (!list.length) {
       var pending = unbilledEntries.length + unbilledMaterials.length
         + unbilledTrips.length + openFixed.length;
@@ -158,10 +160,12 @@
        blir utgifterna - de behovs for bokforingen och uppfoljningen anda. */
     if (S.vatExempt()) {
       var all = S.expenses();
+      var st = S.vatExemptStatus();
       return '<div class="section-title">Utgifter</div>'
         + '<p class="small muted" style="margin:0 0 10px">Momsbefriad — ingen momsdeklaration '
-        + 'behövs. Utgifterna sparas för bokföringen och kvittona. Momsregistrerar du dig '
-        + 'ändras det under Inställningar.</p>'
+        + 'behövs. Årets fakturering: <b>' + U.money0(st.used) + '</b> av ' + U.money0(st.limit)
+        + ' (momsbefrielsens tak). Utgifterna sparas för bokföringen och kvittona. '
+        + 'Momsregistrerar du dig ändras det under Inställningar.</p>'
         + '<button class="btn btn-block" data-new-expense>+ Ny utgift</button>'
         + (all.length
           ? '<div class="list" style="margin-top:10px">' + all.map(expenseItem).join('') + '</div>'
@@ -459,6 +463,31 @@
       + (overdue ? '<span class="badge badge-danger">Förfallen</span>' : '')
       + '<span class="dot">•</span><span>' + (inv.lines ? inv.lines.length : 0) + ' rader</span>'
       + '</div></button>';
+  }
+
+  /* Varnar en momsbefriad firma nar arets fakturering narmar sig taket.
+     Tyst under 75 % - da finns inget att saga - och skarpt over 100 %. */
+  function vatExemptWarning() {
+    if (!S.vatExempt()) return '';
+    var st = S.vatExemptStatus();
+
+    if (st.used >= st.limit) {
+      return note('warn', 'Momsgränsen passerad',
+        'Årets fakturering är <b>' + U.money0(st.used) + '</b> — över momsbefrielsens tak på '
+        + U.money0(st.limit) + '. Du måste momsregistrera dig hos Skatteverket (verksamt.se) '
+        + 'och lägga moms på försäljningen över taket. Bocka ur <i>Momsbefriad</i> under '
+        + 'Inställningar när registreringen är klar.');
+    }
+
+    if (st.share >= 0.75) {
+      return note('warn', 'Närmar dig momsgränsen',
+        'Årets fakturering: <b>' + U.money0(st.used) + '</b> av ' + U.money0(st.limit)
+        + ' — ' + U.money0(st.left) + ' kvar innan momsbefrielsen tar slut. Ser du att taket '
+        + 'kommer att passeras: momsregistrera dig i förväg, det går inte att lägga moms '
+        + 'retroaktivt på redan skickade fakturor utan att kontakta kunden.');
+    }
+
+    return '';
   }
 
   /* ---------- Ny faktura ---------- */
