@@ -71,9 +71,109 @@
     }
 
     html += vatCardHTML();
+    html += yearCardHTML();
 
     el.innerHTML = html;
     wire(el);
+  }
+
+  /* ---------- Arssammanstallning ----------
+
+     Siffrorna NE-bilagan fragar efter: arets intakter, kostnader och
+     resultat. "Las av, skriv in, klart" - och en utskrift att lagga i
+     deklarationsmappen. */
+
+  var yearOffset = 0; // 0 = i ar, -1 = forra aret
+
+  function summaryYear(offset) {
+    return new Date().getFullYear() + offset;
+  }
+
+  function yearCardHTML() {
+    var ys = S.yearSummary(summaryYear(yearOffset));
+
+    var html = '<div class="section-title">Årssammanställning</div>';
+
+    html += '<div class="seg" style="margin-bottom:14px">'
+      + '<button type="button" data-ys-year="0" aria-pressed="' + (yearOffset === 0) + '">'
+      + summaryYear(0) + '</button>'
+      + '<button type="button" data-ys-year="-1" aria-pressed="' + (yearOffset === -1) + '">'
+      + summaryYear(-1) + '</button>'
+      + '</div>';
+
+    html += '<div class="totals">'
+      + '<div class="totals-row"><span class="muted">Intäkter · fakturerat ('
+      + ys.invoiceCount + ' fakturor)</span><span>' + U.money(ys.income) + '</span></div>'
+      + '<div class="totals-row"><span class="muted">Materialinköp (' + ys.materialCount
+      + ')</span><span>−' + U.money(ys.materialCost) + '</span></div>'
+      + '<div class="totals-row"><span class="muted">Utgifter (' + ys.expenseCount
+      + ')</span><span>−' + U.money(ys.expenseCost) + '</span></div>'
+      + (ys.distance
+        ? '<div class="totals-row"><span class="muted">Milersättning egen bil ('
+          + U.distance(ys.distance) + ' × ' + U.money0(ys.mileageRate) + ')</span><span>−'
+          + U.money(ys.mileageCost) + '</span></div>'
+        : '')
+      + '<div class="totals-row grand"><span>Resultat (överskott)</span><span>'
+      + U.money(ys.result) + '</span></div>'
+      + (ys.result > 0
+        ? '<div class="totals-row"><span class="small muted">Grovt riktmärke att lägga undan '
+          + 'till skatt och egenavgifter (~45 %)</span><span class="small muted">'
+          + U.money0(ys.result * 0.45) + '</span></div>'
+        : '')
+      + '</div>';
+
+    html += '<p class="small muted" style="margin:8px 0 12px">Underlag för NE-bilagan i '
+      + 'inkomstdeklarationen. Överskottet förs in där — schablonavdraget för egenavgifter '
+      + '(25 %) och skatten räknar Skatteverkets e-tjänst ut. Milersättningen räknas med '
+      + 'ditt värde från Inställningar; kolla att det följer Skatteverkets skattefria '
+      + 'schablon. Skatteriktmärket är en grov schablon och beror på lön och kommun.</p>';
+
+    html += '<button class="btn btn-block" data-print-year>Skriv ut / PDF</button>';
+
+    return html;
+  }
+
+  function yearPrintHTML(ys) {
+    var co = S.company();
+
+    var html = '<div class="invoice">';
+
+    html += '<div class="inv-head">'
+      + '<div><h2>Årssammanställning ' + U.esc(ys.year) + '</h2>'
+      + '<div class="inv-from"><b>' + U.esc(co.name || '') + '</b><br>'
+      + (co.orgnr ? 'Org.nr ' + U.esc(co.orgnr) : '') + '</div></div>'
+      + '<div class="inv-meta">'
+      + '<div><b>Period</b> ' + U.esc(ys.year) + '-01-01 – ' + U.esc(ys.year) + '-12-31</div>'
+      + '<div><b>Utskriven</b> ' + U.esc(S.todayISO()) + '</div>'
+      + '</div></div>';
+
+    html += '<div class="inv-sum" style="margin-left:0;width:100%;max-width:420px">'
+      + '<div class="inv-sum-row"><span>Intäkter (' + ys.invoiceCount + ' fakturor)</span><span>'
+      + U.money(ys.income) + '</span></div>'
+      + '<div class="inv-sum-row"><span>Materialinköp (' + ys.materialCount + ')</span><span>−'
+      + U.money(ys.materialCost) + '</span></div>'
+      + '<div class="inv-sum-row"><span>Utgifter (' + ys.expenseCount + ')</span><span>−'
+      + U.money(ys.expenseCost) + '</span></div>'
+      + (ys.distance
+        ? '<div class="inv-sum-row"><span>Milersättning egen bil (' + U.distance(ys.distance)
+          + ' × ' + U.money0(ys.mileageRate) + ')</span><span>−'
+          + U.money(ys.mileageCost) + '</span></div>'
+        : '')
+      + '<div class="inv-sum-row total"><span>Resultat (överskott)</span><span>'
+      + U.money(ys.result) + '</span></div>'
+      + '</div>';
+
+    html += '<div class="inv-note" style="margin-top:18px">Underlag ur Timstock för NE-bilagan. '
+      + 'Intäkter räknas på fakturadatum, kostnader på inköpsdatum. Omfattar det som '
+      + 'registrerats i appen — verifikationerna (fakturor och kvitton) sparas i 7 år.</div>';
+
+    return html + '</div>';
+  }
+
+  function printYearSummary() {
+    var area = document.getElementById('print-area');
+    area.innerHTML = yearPrintHTML(S.yearSummary(summaryYear(yearOffset)));
+    setTimeout(function () { global.print(); }, 60);
   }
 
   /* ---------- Momsunderlag ----------
@@ -1377,6 +1477,9 @@
       var b = ev.target.closest('[data-vat-basis]');
       if (b) { vatBasis = b.getAttribute('data-vat-basis'); render(el); return; }
       if (ev.target.closest('[data-print-vat]')) { printVatReport(); return; }
+      var yb = ev.target.closest('[data-ys-year]');
+      if (yb) { yearOffset = Number(yb.getAttribute('data-ys-year')); render(el); return; }
+      if (ev.target.closest('[data-print-year]')) { printYearSummary(); return; }
       if (ev.target.closest('[data-new-expense]')) { openExpense(null); return; }
       var x = ev.target.closest('[data-expense]');
       if (x) openExpense(x.getAttribute('data-expense'));

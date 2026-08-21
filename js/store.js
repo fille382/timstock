@@ -763,6 +763,63 @@
     return out;
   }
 
+  /* ---------- Arssammanstallning ----------
+
+     Underlaget for NE-bilagan: arets intakter och kostnader sa som appen
+     kanner dem. Intakter = fakturerat (exkl. moms - for en momsbefriad firma
+     ar subtotal hela beloppet). Kostnader = materialinkop till inkopspris,
+     utgifter netto (brutto minus avdragsgill moms; for en befriad firma ar
+     hela beloppet kostnad eftersom momsen inte far dras av) samt
+     milersattning for registrerade korningar. */
+
+  function yearSummary(year) {
+    var y = String(year);
+    var inYear = function (d) { return yearOf(d) === y; };
+    var out = {
+      year: y, income: 0, invoiceCount: 0,
+      materialCost: 0, materialCount: 0,
+      expenseCost: 0, expenseCount: 0,
+      distance: 0, tripCount: 0
+    };
+
+    data.invoices.forEach(function (i) {
+      if (!inYear(i.issueDate)) return;
+      out.income += Number(i.subtotal || 0);
+      out.invoiceCount++;
+    });
+
+    data.materials.forEach(function (m) {
+      if (!inYear(m.date)) return;
+      var c = Number(m.cost);
+      if (!isFinite(c) || c <= 0) return;
+      out.materialCost += Number(m.qty || 0) * c;
+      out.materialCount++;
+    });
+
+    data.expenses.forEach(function (x) {
+      if (!inYear(x.date)) return;
+      out.expenseCost += Math.max(0, Number(x.gross || 0)
+        - (vatExempt() ? 0 : Number(x.vat || 0)));
+      out.expenseCount++;
+    });
+
+    data.trips.forEach(function (t) {
+      if (!inYear(t.date)) return;
+      out.distance += Number(t.distance || 0);
+      out.tripCount++;
+    });
+
+    out.income = round2(out.income);
+    out.materialCost = round2(out.materialCost);
+    out.expenseCost = round2(out.expenseCost);
+    out.distance = round2(out.distance);
+    out.mileageRate = Number(data.settings.mileageRate) || 0;
+    out.mileageCost = round2(out.distance * out.mileageRate);
+    out.totalCosts = round2(out.materialCost + out.expenseCost + out.mileageCost);
+    out.result = round2(out.income - out.totalCosts);
+    return out;
+  }
+
   /* ---------- Fakturor ---------- */
 
   function invoices() {
@@ -924,7 +981,7 @@
     deleteMaterial: deleteMaterial, materialAmount: materialAmount,
     materialPurchaseVat: materialPurchaseVat,
     expenses: expenses, expense: expense, saveExpense: saveExpense, deleteExpense: deleteExpense,
-    vatReport: vatReport,
+    vatReport: vatReport, yearSummary: yearSummary,
     savePhoto: savePhoto, getPhoto: getPhoto, deletePhoto: deletePhoto,
     exportBackup: exportBackup,
     isFixed: isFixed, isFixedProject: isFixedProject, fixedCoversExtras: fixedCoversExtras,

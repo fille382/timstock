@@ -308,6 +308,16 @@ kameraappen först och välj den ur galleriet i stället för att fota direkt.
 Fotona följer med i JSON-säkerhetskopian (som base64 — filen växer med
 antalet kvitton) och återställs vid import. Tas posten bort tas fotot bort.
 
+## Årssammanställning
+
+Längst ner under **Fakturor**: årets intäkter (fakturerat), kostnader
+(materialinköp till inköpspris, utgifter netto, milersättning för
+registrerade körningar) och resultatet — siffrorna NE-bilagan i
+inkomstdeklarationen frågar efter, med årsväxlare och **Skriv ut / PDF**.
+För en momsbefriad firma räknas utgifterna till hela beloppet (momsen får ju
+inte dras av). En grov rad visar ~45 % av överskottet som riktmärke att
+lägga undan till skatt och egenavgifter.
+
 ## Säkerhetskopiering
 
 Datan finns **bara i den webbläsare du använder**. Rensar du webbläsardata eller
