@@ -1,5 +1,5 @@
 /* sw.js - cachar appens filer sa den fungerar utan tackning ute pa faltet. */
-var CACHE = 'timstock-v23';
+var CACHE = 'timstock-v24';
 
 var ASSETS = [
   './',
@@ -10,6 +10,7 @@ var ASSETS = [
   './js/store.js',
   './js/ui.js',
   './js/pdf.js',
+  './js/drive.js',
   './js/view-time.js',
   './js/view-clients.js',
   './js/view-invoices.js',
@@ -37,9 +38,14 @@ self.addEventListener('activate', function (ev) {
   );
 });
 
-/* Natet forst, cache som reserv - da far du senaste versionen nar du har tackning. */
+/* Natet forst, cache som reserv - da far du senaste versionen nar du har tackning.
+
+   Bara appens egna filer: Googles API-svar (Drive-synken) far aldrig cachas,
+   annars kan en gammal kopia av backupfilen serveras ur cachen utan tackning
+   och se ut som farsk data. */
 self.addEventListener('fetch', function (ev) {
   if (ev.request.method !== 'GET') return;
+  if (ev.request.url.indexOf(self.location.origin) !== 0) return;
 
   ev.respondWith(
     fetch(ev.request)
