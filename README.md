@@ -336,6 +336,7 @@ Exportera regelbundet under **Inställningar → Säkerhetskopiering**:
 | `css/styles.css` | All formgivning, inklusive utskriftslayout |
 | `js/store.js` | Datalager: kunder, projekt, tid, material, körningar, fakturor |
 | `js/ui.js` | Formatering, toast och formulärpanelen |
+| `js/pdf.js` | Bygger fakturans PDF-fil, utan bibliotek |
 | `js/view-time.js` | Tidrapporten — tid, material och körningar |
 | `js/view-clients.js` | Kunder och projekt |
 | `js/view-invoices.js` | Fakturor, fakturamall och utskrift |
@@ -364,6 +365,18 @@ långa för cm, korta för mm.
 Allt är dekor: lagret är `aria-hidden`, tar inga klick, och släcks vid utskrift
 så att fakturan blir ren. Rörelsen stängs av för den som valt reducerad
 animation i systeminställningarna.
+
+## Skicka fakturan med sms eller mejl
+
+Öppna fakturan och tryck **Skicka (sms/mejl)**. Appen bygger fakturan som en
+PDF-fil och öppnar telefonens delningsmeny — där väljer du Meddelanden (sms),
+mejlappen eller vad du vill, med filen och en färdig följetext (fakturanummer,
+förfallodatum, belopp och bankgiro) på plats. Inget skickas av appen själv;
+du trycker skicka i appen du valde.
+
+I en webbläsare utan fildelning (t.ex. äldre datorwebbläsare) laddas PDF:en
+ner i stället, och har kunden en mejladress öppnas ett mejlutkast — filen är
+bara att bifoga.
 
 ## Skriva ut / spara som PDF
 

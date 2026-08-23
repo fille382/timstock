@@ -1,4 +1,4 @@
-/* view-invoices.js - skapa, visa och skriva ut fakturor. */
+/* view-invoices.js - skapa, visa, skriva ut och skicka fakturor. */
 (function (global) {
   'use strict';
 
@@ -1170,9 +1170,8 @@
     var st = STATUS[inv.status] || STATUS.utkast;
 
     var html = '<div class="btn-row" style="margin-bottom:14px">'
-      + '<button class="btn btn-primary" data-print>Skriv ut / PDF</button>'
-      + (inv.clientSnapshot && inv.clientSnapshot.email
-        ? '<button class="btn" data-mail>E-post</button>' : '')
+      + '<button class="btn btn-primary" data-share>Skicka (sms/mejl)</button>'
+      + '<button class="btn" data-print>Skriv ut / PDF</button>'
       + '</div>';
 
     html += '<div class="seg" style="margin-bottom:14px">'
@@ -1228,7 +1227,7 @@
     U.openSheet('Faktura ' + inv.number, html, function (body) {
       body.addEventListener('click', function (ev) {
         if (ev.target.closest('[data-print]')) { printInvoice(inv); return; }
-        if (ev.target.closest('[data-mail]')) { mailInvoice(inv); return; }
+        if (ev.target.closest('[data-share]')) { shareInvoice(inv); return; }
         if (ev.target.closest('[data-rot-claim]')) {
           var wasClaimed = !!inv.rotClaimedDate;
           S.setInvoiceRotClaimed(inv.id, !wasClaimed);
@@ -1442,12 +1441,11 @@
     setTimeout(function () { global.print(); }, 60);
   }
 
-  /* Öppnar ett mejlutkast i användarens mejlapp — inget skickas automatiskt. */
-  function mailInvoice(inv) {
+  /* Foljetexten till fakturan - blir sms:ets eller mejlets innehall. */
+  function invoiceMessage(inv) {
     var cl = inv.clientSnapshot || {};
     var co = inv.companySnapshot || {};
-    var subject = 'Faktura ' + inv.number + ' från ' + (co.name || '');
-    var bodyText = 'Hej' + (cl.contact ? ' ' + cl.contact : '') + ',\n\n'
+    return 'Hej' + (cl.contact ? ' ' + cl.contact : '') + ',\n\n'
       + 'Här kommer faktura ' + inv.number + '.\n\n'
       + 'Fakturadatum: ' + inv.issueDate + '\n'
       + 'Förfallodatum: ' + (inv.dueDate || '-') + '\n'
@@ -1458,9 +1456,56 @@
       + 'Att betala: ' + U.money(inv.total) + '\n\n'
       + (co.bankgiro ? 'Bankgiro: ' + co.bankgiro + '\n' : '')
       + '\nMed vänlig hälsning\n' + (co.name || '');
-    global.location.href = 'mailto:' + encodeURIComponent(cl.email || '')
-      + '?subject=' + encodeURIComponent(subject)
-      + '&body=' + encodeURIComponent(bodyText);
+  }
+
+  /* Skickar fakturan som PDF via telefonens delningsmeny - dar valjer man
+     Meddelanden (sms), mejlappen eller vad man vill; filen och foljetexten
+     hanger med. Inget skickas fran appen sjalv - det sker i appen man valjer. */
+  function shareInvoice(inv) {
+    var blob;
+    try {
+      blob = global.PDF.invoiceBlob(inv);
+    } catch (err) {
+      console.error(err);
+      U.toast('Kunde inte skapa PDF:en', true);
+      return;
+    }
+
+    var name = global.PDF.invoiceFilename(inv);
+    var file = null;
+    try {
+      file = new File([blob], name, { type: 'application/pdf' });
+    } catch (err) { /* gammal webblasare utan File-konstruktor */ }
+
+    var nav = global.navigator;
+    if (file && nav.share && nav.canShare && nav.canShare({ files: [file] })) {
+      nav.share({
+        files: [file],
+        title: 'Faktura ' + inv.number,
+        text: invoiceMessage(inv)
+      }).catch(function (err) {
+        /* Stangd delningsmeny ar inget fel - allt annat far reservvagen. */
+        if (err && err.name === 'AbortError') return;
+        console.error(err);
+        sharePdfFallback(inv, blob, name);
+      });
+      return;
+    }
+
+    sharePdfFallback(inv, blob, name);
+  }
+
+  /* Utan stod for fildelning (t.ex. aldre webblasare pa datorn): ladda ner
+     PDF:en och oppna ett mejlutkast, sa att filen bara ar att bifoga. */
+  function sharePdfFallback(inv, blob, name) {
+    U.download(name, blob, 'application/pdf');
+    U.toast('PDF:en laddades ner — bifoga den i mejlet eller sms:et');
+    var cl = inv.clientSnapshot || {};
+    var co = inv.companySnapshot || {};
+    if (!cl.email) return;
+    global.location.href = 'mailto:' + encodeURIComponent(cl.email)
+      + '?subject=' + encodeURIComponent('Faktura ' + inv.number + ' från ' + (co.name || ''))
+      + '&body=' + encodeURIComponent(invoiceMessage(inv));
   }
 
   function wire(el) {
