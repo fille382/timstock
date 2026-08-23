@@ -96,10 +96,17 @@
       + '<button class="btn btn-primary btn-block" data-save-settings>Spara standardvärden</button>'
       + '</div>';
 
+    var b = S.backupStatus();
+
     html += '<div class="card"><div class="card-title">Säkerhetskopiering</div>'
       + '<p class="small muted" style="margin:-4px 0 12px">Datan ligger bara i den här webbläsaren. '
-      + 'Exportera regelbundet — särskilt innan du rensar webbläsardata eller byter telefon.</p>'
+      + 'Dela en kopia till mejlen eller molnet med jämna mellanrum — det är enda skyddet om '
+      + 'telefonen tappas, går sönder eller webbläsardatan rensas.</p>'
       + '<div class="totals" style="margin-bottom:12px">'
+      + '<div class="totals-row"><span class="muted">Senaste säkerhetskopia</span>'
+      + '<span id="s-lastbackup">' + U.esc(b.last || 'aldrig')
+      + (b.days >= 30 ? ' ⚠' : '') + '</span></div>'
+      + '<div class="totals-row"><span class="muted">Lagring</span><span id="s-persist">–</span></div>'
       + '<div class="totals-row"><span class="muted">Kunder</span><span>' + d.clients.length + '</span></div>'
       + '<div class="totals-row"><span class="muted">Projekt</span><span>' + d.projects.length + '</span></div>'
       + '<div class="totals-row"><span class="muted">Tidsposter</span><span>' + d.entries.length + '</span></div>'
@@ -108,7 +115,8 @@
       + '<div class="totals-row"><span class="muted">Utgifter</span><span>' + d.expenses.length + '</span></div>'
       + '<div class="totals-row"><span class="muted">Fakturor</span><span>' + d.invoices.length + '</span></div>'
       + '</div>'
-      + '<button class="btn btn-block" data-export>Exportera säkerhetskopia (JSON, inkl. kvittofoton)</button>'
+      + '<button class="btn btn-primary btn-block" data-backup-share>Dela säkerhetskopia (mejl/moln)</button>'
+      + '<button class="btn btn-block" data-export style="margin-top:10px">Ladda ner säkerhetskopia (JSON, inkl. kvittofoton)</button>'
       + '<button class="btn btn-block" data-export-csv style="margin-top:10px">Exportera tid, material &amp; körjournal (CSV)</button>'
       + '<label class="btn btn-block" style="margin-top:10px">Importera säkerhetskopia'
       + '<input type="file" id="s-import" accept="application/json,.json" hidden></label>'
@@ -121,6 +129,14 @@
 
     el.innerHTML = html;
     wire(el);
+
+    /* Bestandig lagring begars vid uppstart (app.js) - har visas bara svaret. */
+    if (global.navigator.storage && global.navigator.storage.persisted) {
+      global.navigator.storage.persisted().then(function (p) {
+        var n = el.querySelector('#s-persist');
+        if (n) n.textContent = p ? 'skyddad mot rensning' : 'kan rensas av webbläsaren';
+      }).catch(function () {});
+    }
   }
 
   function field(id, label, value, type) {
@@ -198,6 +214,62 @@
     }).join('\r\n');
   }
 
+  /* ---------- Sakerhetskopia ---------- */
+
+  /* Hela datan som JSON. Gick kvittofotona inte att lasa ar en kopia utan
+     dem battre an ingen alls - men det ska synas att de saknas. */
+  function backupText() {
+    return S.exportBackup().catch(function (err) {
+      console.error(err);
+      U.toast('Kvittofotona kunde inte läsas — kopian görs utan dem', true);
+      return S.exportJSON();
+    });
+  }
+
+  function backupFileName() {
+    return 'timstock-backup-' + S.todayISO() + '.json';
+  }
+
+  /* Kopian raknas som gjord. Raden uppdateras pa plats i stallet for en
+     omrendering, sa att osparade falt i formularen ovanfor inte nollstalls. */
+  function backupDone(el) {
+    S.markBackupDone();
+    var n = el.querySelector('#s-lastbackup');
+    if (n) n.textContent = S.todayISO();
+  }
+
+  /* Delar kopian som fil via delningsmenyn - mejla dig sjalv eller lagg den
+     i molnet, sa finns den utanfor telefonen om nagot hander med den.
+     Utan stod for fildelning laddas den ner som vanligt. */
+  function shareBackup(el, text) {
+    var name = backupFileName();
+    var file = null;
+    try {
+      file = new File([text], name, { type: 'application/json' });
+    } catch (e) { /* gammal webblasare utan File-konstruktor */ }
+
+    var nav = global.navigator;
+    if (file && nav.share && nav.canShare && nav.canShare({ files: [file] })) {
+      nav.share({ files: [file], title: name }).then(function () {
+        backupDone(el);
+        U.toast('Säkerhetskopia delad');
+      }).catch(function (err) {
+        /* Stangd delningsmeny ar inget fel - allt annat far nedladdningen. */
+        if (err && err.name === 'AbortError') return;
+        console.error(err);
+        downloadBackup(el, text);
+      });
+      return;
+    }
+    downloadBackup(el, text);
+  }
+
+  function downloadBackup(el, text) {
+    U.download(backupFileName(), text);
+    backupDone(el);
+    U.toast('Säkerhetskopia sparad bland nedladdade filer');
+  }
+
   function wire(el) {
     if (el.dataset.wired) return;
     el.dataset.wired = '1';
@@ -236,16 +308,14 @@
         return;
       }
 
+      if (ev.target.closest('[data-backup-share]')) {
+        backupText().then(function (text) { shareBackup(el, text); });
+        return;
+      }
+
       if (ev.target.closest('[data-export]')) {
-        S.exportBackup().then(function (text) {
-          U.download('timstock-backup-' + S.todayISO() + '.json', text);
-          U.toast('Säkerhetskopia exporterad');
-        }).catch(function (err) {
-          /* Kvittofotona gick inte att lasa - exportera hellre datan utan
-             dem an ingenting alls. */
-          console.error(err);
-          U.download('timstock-backup-' + S.todayISO() + '.json', S.exportJSON());
-          U.toast('Exporterad utan kvittofoton');
+        backupText().then(function (text) {
+          downloadBackup(el, text);
         });
         return;
       }

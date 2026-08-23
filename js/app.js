@@ -244,6 +244,18 @@
 
     route(true);
     registerServiceWorker();
+    requestPersistentStorage();
+  }
+
+  /* Ber webblasaren att inte stada bort appens data (localStorage och
+     kvittofotona i IndexedDB) nar telefonens utrymme tryter. Tyst begaran -
+     Chrome beviljar utifran anvandning, och ett nej andrar ingenting.
+     Skyddar mot webblasarens egen stadning, inte mot tappad telefon -
+     det gor bara en delad sakerhetskopia (se Installningar). */
+  function requestPersistentStorage() {
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().catch(function () {});
+    }
   }
 
   /* Offlinestöd fungerar bara när sidan serveras över https eller localhost. */

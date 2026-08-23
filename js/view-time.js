@@ -102,6 +102,30 @@
 
   /* ---------- Rendering ---------- */
 
+  /* Paminnelse nar sakerhetskopian borjar bli gammal. All data ligger i
+     webblasaren, sa en kopia utanfor telefonen ar enda skyddet om den tappas
+     eller gar sonder. Visas forst nar det finns nagot att forlora - och
+     tjatar inte pa ett nystartat konto. */
+  function backupNotice() {
+    var b = S.backupStatus();
+    var text = '';
+
+    if (!b.last) {
+      if (b.items >= 10) {
+        text = 'Ingen säkerhetskopia är gjord ännu. Datan finns bara i den här webbläsaren — '
+          + 'tappas telefonen eller rensas webbläsardatan är den borta.';
+      }
+    } else if (b.days >= 30) {
+      text = 'Senaste säkerhetskopian är ' + b.days + ' dagar gammal. Det som registrerats '
+        + 'sedan dess finns bara i den här webbläsaren.';
+    }
+
+    if (!text) return '';
+    return '<div class="notice notice-warn"><b>Dags att säkerhetskopiera</b><br>' + text
+      + '<br><button class="btn" type="button" data-goto="settings" style="margin-top:10px">'
+      + 'Dela en kopia — under Inställningar</button></div>';
+  }
+
   function render(el) {
     container = el;
     var items = combined();
@@ -152,6 +176,8 @@
       + '<div class="stat"><div class="stat-value">' + U.money0(unbilledAmount) + '</div>'
       + '<div class="stat-label">Ofakturerat</div></div>'
       + '</div>';
+
+    html += backupNotice();
 
     html += '<div class="seg" style="margin-bottom:10px">'
       + segBtn('period', 'month', 'Denna månad')

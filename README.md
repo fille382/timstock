@@ -320,12 +320,26 @@ lägga undan till skatt och egenavgifter.
 
 ## Säkerhetskopiering
 
-Datan finns **bara i den webbläsare du använder**. Rensar du webbläsardata eller
-byter telefon är den borta.
+Datan finns **bara i den webbläsare du använder**. Tre skydd, mot tre olika
+risker:
 
-Exportera regelbundet under **Inställningar → Säkerhetskopiering**:
+1. **Beständig lagring** — appen ber webbläsaren att inte städa bort datan
+   när telefonens utrymme tryter (`navigator.storage.persist()`, begärs
+   automatiskt vid start). Status syns under Inställningar → Säkerhetskopiering.
+2. **Dela säkerhetskopia** — ett tryck under **Inställningar →
+   Säkerhetskopiering** öppnar delningsmenyn, så att kopian hamnar i mejlen
+   eller molnet, **utanför telefonen**. Det är enda skyddet om telefonen
+   tappas eller går sönder. Kvittofotona följer med (som base64 — filen växer
+   med antalet kvitton).
+3. **Påminnelse** — en ruta i tidrapporten när senaste kopian är över 30
+   dagar gammal (eller aldrig gjord fast det finns data att förlora).
 
-- **JSON** — fullständig kopia som kan importeras tillbaka.
+Tappad telefon: öppna appen på den nya, **Importera säkerhetskopia** under
+Inställningar och peka ut senaste kopian från mejlen/molnet.
+
+Övriga exporter under samma rubrik:
+
+- **JSON (nedladdning)** — samma fullständiga kopia, till Hämtade filer.
 - **CSV** — tid, material och körjournal i en fil, med kolumner för projekt och ÄTA.
 
 ## Filer

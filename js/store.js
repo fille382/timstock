@@ -26,7 +26,8 @@
         nextInvoiceNumber: 1,
         rotPercent: 30,
         rotMaxPerYear: 50000,
-        vatPeriod: 'kvartal' // 'manad' | 'kvartal' | 'helar'
+        vatPeriod: 'kvartal', // 'manad' | 'kvartal' | 'helar'
+        lastBackupDate: ''
       },
       clients: [],
       projects: [],
@@ -955,6 +956,25 @@
     });
   }
 
+  /* Hur gammal senaste sakerhetskopian ar och hur mycket som star pa spel.
+     Anvands av paminnelsen i tidrapporten och raden under Installningar. */
+  function backupStatus() {
+    var last = data.settings.lastBackupDate || '';
+    var items = data.clients.length + data.entries.length + data.materials.length
+      + data.trips.length + data.expenses.length + data.invoices.length;
+    var days = null;
+    if (last) {
+      var ms = Date.parse(todayISO()) - Date.parse(last);
+      if (isFinite(ms)) days = Math.max(0, Math.round(ms / 86400000));
+    }
+    return { last: last, days: days, items: items };
+  }
+
+  function markBackupDone() {
+    data.settings.lastBackupDate = todayISO();
+    save();
+  }
+
   function resetAll() {
     data = defaults();
     clearPhotos().catch(function () {});
@@ -983,7 +1003,7 @@
     expenses: expenses, expense: expense, saveExpense: saveExpense, deleteExpense: deleteExpense,
     vatReport: vatReport, yearSummary: yearSummary,
     savePhoto: savePhoto, getPhoto: getPhoto, deletePhoto: deletePhoto,
-    exportBackup: exportBackup,
+    exportBackup: exportBackup, backupStatus: backupStatus, markBackupDone: markBackupDone,
     isFixed: isFixed, isFixedProject: isFixedProject, fixedCoversExtras: fixedCoversExtras,
     openFixedProjects: openFixedProjects, fixedPriceOf: fixedPriceOf, fixedLabourOf: fixedLabourOf,
     suggestedFixedLabour: suggestedFixedLabour,
