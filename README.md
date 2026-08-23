@@ -5,7 +5,8 @@ Timmar, kommentarer och fakturor — ute på fältet.
 Mobilanpassad app för att registrera arbetade timmar med en kommentar per
 inlägg, hålla reda på material du lagt ut för och körningar du gjort, och göra
 fakturor av alltihop. Ren HTML/CSS/JS — inget bygge, inget ramverk, ingen
-server. All data ligger lokalt i webbläsaren (`localStorage`).
+server. All data ligger lokalt i webbläsaren (`localStorage`), med frivillig
+säkerhetskopiering och synk mellan enheter via Google Drive.
 
 ## Kom igång
 
@@ -328,6 +329,75 @@ Exportera regelbundet under **Inställningar → Säkerhetskopiering**:
 - **JSON** — fullständig kopia som kan importeras tillbaka.
 - **CSV** — tid, material och körjournal i en fil, med kolumner för projekt och ÄTA.
 
+Eller låt appen sköta det själv: koppla ett Google-konto så hamnar
+säkerhetskopian i din Drive automatiskt — se nästa avsnitt.
+
+## Google Drive — säkerhetskopia och synk mellan enheter
+
+Logga in med ditt Google-konto (Gmail) under **Inställningar → Google Drive**,
+så sparas säkerhetskopian — inklusive kvittofoton — automatiskt som filen
+`timstock-backup.json` i din Drive. Samma fil hämtas på dina andra enheter, så
+mobilen och datorn delar data.
+
+Fortfarande ingen egen server: webbläsaren pratar direkt med Googles
+inloggning och Drive. Behörigheten är `drive.file`, vilket betyder att appen
+**bara ser filer den själv skapat** — aldrig något annat i din Drive.
+
+### Engångsförberedelse: skapa ett klient-ID
+
+För att Google ska släppa in appen behövs ett OAuth-klient-ID. Det skapas
+gratis i Google Cloud Console och tar några minuter:
+
+1. Gå till <https://console.cloud.google.com>, logga in och skapa ett nytt
+   projekt (namnet spelar ingen roll, t.ex. *Timstock*).
+2. **APIs & Services → Library**: sök upp och aktivera **Google Drive API**.
+3. **APIs & Services → OAuth consent screen**: välj typen **External** och
+   fyll i appnamn och din e-post. Tryck sedan **Publish app** — appen behöver
+   ingen granskning av Google, eftersom den bara begär icke-känsliga
+   behörigheter (`drive.file` och din e-postadress). Låter du den i stället
+   stå kvar i testläge måste du lägga till dig själv under **Test users**,
+   och Google ber dig godkänna om inloggningen ungefär en gång i veckan.
+4. **Credentials → Create credentials → OAuth client ID**: välj typen
+   **Web application**. Under **Authorized JavaScript origins** lägger du till
+   adressen appen serveras från — t.ex. `https://dittnamn.github.io` och
+   `http://localhost:8080` för lokal testning. Ingen redirect-URI behövs.
+5. Kopiera klient-ID:t (slutar på `.apps.googleusercontent.com`) och klistra
+   in det under **Inställningar → Google Drive** i appen.
+
+Samma klient-ID används på alla dina enheter. Vill du slippa klistra in det
+på varje enhet kan du skriva in det i `DEFAULT_CLIENT_ID` överst i
+`js/drive.js` innan du lägger upp appen.
+
+> Precis som offlineläget kräver Google-inloggningen `https` eller
+> `localhost` — den fungerar inte när sidan öppnas direkt via `file://`.
+
+### Så funkar synken
+
+- Allt ligger i **en fil** i din Drive, och **senaste skrivning vinner**.
+  Med **Synka automatiskt** ikryssat laddas en ny kopia upp några sekunder
+  efter varje ändring.
+- Innan appen skriver kollar den att ingen annan enhet har sparat sedan
+  sist. Har det hänt — och båda har ändringar — stannar synken och du får
+  välja version under Inställningar i stället för att något skrivs över i
+  tysthet. Är den egna enheten oförändrad hämtas den nyare versionen
+  automatiskt.
+- **Byta eller lägga till enhet:** öppna appen på den nya enheten, fyll i
+  klient-ID:t och tryck **Anslut Google-konto** — är enheten tom hämtas
+  säkerhetskopian direkt.
+- Google-inloggningen gäller ungefär **en timme** i taget. Medan den lever
+  synkas allt tyst; därefter försöker appen förnya den en gång (Googles ruta
+  kan då blinka förbi), och räcker inte det står det **Logga in igen** under
+  Inställningar. Osynkade ändringar ligger kvar och följer med nästa gång.
+- Utan täckning händer ingenting — nästa lyckade synk tar allt.
+- **Radera all data** stänger av autosynken, så att den tomma appen inte
+  skriver över kopian i Drive. Den ligger kvar som livlina tills du väljer
+  något annat.
+- Drive sparar dessutom **äldre versioner** av filen i 30 dagar: högerklicka
+  på `timstock-backup.json` i Drive och välj **Hantera versioner**.
+
+Filen växer med antalet kvittofoton (de ligger med som base64), så den kan
+bli några MB stor — varje synk laddar upp hela filen.
+
 ## Filer
 
 | Fil | Innehåll |
@@ -337,6 +407,7 @@ Exportera regelbundet under **Inställningar → Säkerhetskopiering**:
 | `js/store.js` | Datalager: kunder, projekt, tid, material, körningar, fakturor |
 | `js/ui.js` | Formatering, toast och formulärpanelen |
 | `js/pdf.js` | Bygger fakturans PDF-fil, utan bibliotek |
+| `js/drive.js` | Gmail-inloggning och synk av säkerhetskopian till Google Drive |
 | `js/view-time.js` | Tidrapporten — tid, material och körningar |
 | `js/view-clients.js` | Kunder och projekt |
 | `js/view-invoices.js` | Fakturor, fakturamall och utskrift |

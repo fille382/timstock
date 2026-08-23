@@ -4,6 +4,7 @@
 
   var S = global.Store, U = global.UI;
   var container = null;
+  var editClient = false; // visar klient-ID-faltet aven nar ett redan finns
 
   function render(el) {
     container = el;
@@ -114,6 +115,8 @@
       + '<input type="file" id="s-import" accept="application/json,.json" hidden></label>'
       + '</div>';
 
+    html += driveCard();
+
     html += '<div class="card"><div class="card-title">Farlig zon</div>'
       + '<button class="btn btn-danger btn-block" data-reset>Radera all data</button></div>';
 
@@ -127,6 +130,114 @@
     return '<div class="field"><label for="' + id + '">' + U.esc(label) + '</label>'
       + '<input type="' + (type || 'text') + '" id="' + id + '" value="' + U.esc(value || '') + '"'
       + (type === 'email' ? ' autocapitalize="off"' : '') + '></div>';
+  }
+
+  /* ---------- Google Drive ---------- */
+
+  /* "2026-08-23T14:32:05.000Z" -> "2026-08-23 15:32" (lokal tid) */
+  function syncTime(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return U.toISO(d) + ' ' + String(d.getHours()).padStart(2, '0')
+      + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  function driveStatusRows(st) {
+    var status;
+    if (st.syncing) status = 'Synkar …';
+    else if (st.connected) status = 'Ansluten' + (st.email ? ' som ' + st.email : '');
+    else if (st.email) status = 'Utloggad (' + st.email + ')';
+    else status = 'Inte ansluten';
+
+    var html = '<div class="totals" style="margin-bottom:12px">'
+      + '<div class="totals-row"><span class="muted">Status</span><span>' + U.esc(status) + '</span></div>'
+      + '<div class="totals-row"><span class="muted">Senast synkad</span><span>'
+      + U.esc(st.lastSync ? syncTime(st.lastSync) : 'Aldrig') + '</span></div>';
+    if (st.dirty && st.lastSync) {
+      html += '<div class="totals-row"><span class="muted">Sedan dess</span>'
+        + '<span>Osynkade ändringar</span></div>';
+    }
+    html += '</div>';
+    if (st.lastError) {
+      html += '<p class="small warn-text" style="margin:-4px 0 12px">' + U.esc(st.lastError) + '</p>';
+    }
+    return html;
+  }
+
+  function driveCard() {
+    var D = global.Drive;
+    if (!D) return '';
+    var st = D.state();
+
+    var html = '<div class="card" id="drive-card"><div class="card-title">Google Drive — synk mellan enheter</div>'
+      + '<p class="small muted" style="margin:-4px 0 12px">Logga in med ditt Google-konto (Gmail) '
+      + 'så sparas säkerhetskopian — inklusive kvittofoton — automatiskt i din Drive och följer '
+      + 'med mellan mobil och dator. Appen ser bara sin egen fil, inget annat i din Drive.</p>';
+
+    if (!st.configured || editClient) {
+      html += '<div class="field"><label for="drv-client">Klient-ID (OAuth) från Google Cloud</label>'
+        + '<input type="text" id="drv-client" autocapitalize="off" spellcheck="false" '
+        + 'placeholder="….apps.googleusercontent.com" value="' + U.esc(st.clientId) + '"></div>'
+        + '<p class="small muted" style="margin:-6px 0 12px">Skapas gratis i Google Cloud Console — '
+        + 'steg för steg i README-filen, avsnittet <b>Google Drive</b>. Använd samma klient-ID på '
+        + 'alla dina enheter.</p>'
+        + '<button class="btn btn-primary btn-block" data-drive-save-client>Spara klient-ID</button>';
+      if (st.configured) {
+        html += '<button class="btn btn-block" data-drive-cancel-client style="margin-top:10px">Avbryt</button>';
+      }
+      return html + '</div>';
+    }
+
+    if (st.conflict) {
+      html += '<div class="notice notice-warn"><b>Versionerna stämmer inte överens.</b> '
+        + 'Säkerhetskopian i Drive (ändrad ' + U.esc(syncTime(st.conflictTime)) + ') och datan på '
+        + 'den här enheten har ändrats var för sig. Välj vilken som ska gälla — den andra skrivs '
+        + 'över.</div>'
+        + '<button class="btn btn-block" data-drive-use-remote style="margin-top:12px">'
+        + 'Använd Drive-versionen här</button>'
+        + '<button class="btn btn-block" data-drive-use-local style="margin-top:10px">'
+        + 'Skriv över Drive med den här enhetens data</button>'
+        + '<p class="small muted" style="margin:10px 0 0">Drive sparar äldre versioner av filen i '
+        + '30 dagar: högerklicka på <b>timstock-backup.json</b> i Drive och välj Hantera versioner.</p>';
+      return html + '</div>';
+    }
+
+    html += driveStatusRows(st)
+      + '<label class="check"><input type="checkbox" id="drv-autosync"'
+      + (st.autoSync ? ' checked' : '') + '>'
+      + '<span>Synka automatiskt när något ändras</span></label>';
+
+    if (st.connected) {
+      html += '<button class="btn btn-block" data-drive-push style="margin-top:12px">Spara till Drive nu</button>'
+        + '<button class="btn btn-block" data-drive-pull style="margin-top:10px">Hämta från Drive</button>'
+        + '<button class="btn btn-block" data-drive-disconnect style="margin-top:10px">Koppla bort kontot</button>';
+    } else {
+      html += '<button class="btn btn-primary btn-block" data-drive-connect style="margin-top:12px">'
+        + (st.email ? 'Logga in igen' : 'Anslut Google-konto') + '</button>'
+        + '<button class="btn btn-block" data-drive-edit-client style="margin-top:10px">Ändra klient-ID</button>';
+      if (st.email) {
+        html += '<button class="btn btn-block" data-drive-disconnect style="margin-top:10px">Koppla bort kontot</button>';
+      }
+    }
+    return html + '</div>';
+  }
+
+  function driveErr(err) {
+    /* En konflikt har redan sitt eget vagval i kortet - inget felmeddelande. */
+    if (err && err.conflict) return;
+    U.toast(err && err.message ? err.message : 'Något gick fel mot Google Drive', true);
+  }
+
+  /* Ritar bara om Drive-kortet - en hel omritning av vyn skulle kasta bort
+     osparade faltandringar i de andra korten. */
+  function refreshDriveCard(force) {
+    if (!container || container.hidden || !document.contains(container)) return;
+    var host = container.querySelector('#drive-card');
+    if (!host) return;
+    /* Skriv inte over faltet mitt i en inklistring av klient-ID:t. */
+    if (!force && document.activeElement && document.activeElement.id === 'drv-client') return;
+    host.outerHTML = driveCard();
   }
 
   function dec(v) {
@@ -256,16 +367,88 @@
         return;
       }
 
+      if (ev.target.closest('[data-drive-save-client]')) {
+        var cid = val(el, '#drv-client');
+        if (!cid) { U.toast('Klistra in klient-ID:t först', true); return; }
+        editClient = false;
+        global.Drive.setClientId(cid);
+        U.toast('Klient-ID sparat');
+        refreshDriveCard(true);
+        return;
+      }
+
+      if (ev.target.closest('[data-drive-cancel-client]')) {
+        editClient = false;
+        refreshDriveCard();
+        return;
+      }
+
+      if (ev.target.closest('[data-drive-edit-client]')) {
+        editClient = true;
+        refreshDriveCard();
+        return;
+      }
+
+      if (ev.target.closest('[data-drive-connect]')) {
+        global.Drive.connect().then(function () {
+          U.toast('Ansluten till Google Drive');
+        }).catch(driveErr);
+        return;
+      }
+
+      if (ev.target.closest('[data-drive-push]')) {
+        global.Drive.push().then(function () {
+          U.toast('Sparad i Google Drive');
+        }).catch(driveErr);
+        return;
+      }
+
+      if (ev.target.closest('[data-drive-pull]') || ev.target.closest('[data-drive-use-remote]')) {
+        if (!confirm('Ersätter all data på den här enheten med säkerhetskopian i Google Drive. Fortsätt?')) return;
+        global.Drive.pull().then(function () {
+          U.toast('Säkerhetskopia hämtad från Drive');
+          global.App.refresh();
+        }).catch(driveErr);
+        return;
+      }
+
+      if (ev.target.closest('[data-drive-use-local]')) {
+        if (!confirm('Skriver över säkerhetskopian i Google Drive med datan på den här enheten. Fortsätt?')) return;
+        global.Drive.forcePush().then(function () {
+          U.toast('Drive uppdaterad');
+        }).catch(driveErr);
+        return;
+      }
+
+      if (ev.target.closest('[data-drive-disconnect]')) {
+        global.Drive.disconnect();
+        U.toast('Google-kontot bortkopplat');
+        return;
+      }
+
       if (ev.target.closest('[data-reset]')) {
         if (!confirm('Radera ALLA kunder, tidsposter och fakturor? Detta går inte att ångra.')) return;
         if (!confirm('Är du helt säker? Exportera en säkerhetskopia först om du är osäker.')) return;
         S.resetAll();
+        /* Autosynken stangs av sa att den tomma appen inte skriver over
+           kopian i Drive - den ligger kvar som livlina. */
+        if (global.Drive) global.Drive.afterReset();
         U.toast('All data raderad');
         render(el);
       }
     });
 
+    /* Rita om kortet nar synken byter tillstand i bakgrunden (uppladdning
+       klar, inloggning gick ut, konflikt upptacktes ...). */
+    if (global.Drive) global.Drive.onChange(refreshDriveCard);
+
     el.addEventListener('change', function (ev) {
+      var auto = ev.target.closest('#drv-autosync');
+      if (auto) {
+        global.Drive.setAutoSync(auto.checked);
+        return;
+      }
+
       var input = ev.target.closest('#s-import');
       if (!input) return;
       var file = input.files && input.files[0];
