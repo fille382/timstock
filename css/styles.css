@@ -471,6 +471,15 @@ input:focus, select:focus, textarea:focus {
 /* Beloppet hålls ihop — det är etiketten som får radbrytas. */
 .totals-row > span + span { white-space: nowrap; }
 
+/* Textvärden (t.ex. e-postadressen i Drive-kortet) bryts i stället för
+   att trycka ut sidan i sidled. */
+.totals-row.wrap > span + span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: right;
+  min-width: 0;
+}
+
 .totals-row.grand {
   border-top: 1px solid var(--border);
   margin-top: 8px;

@@ -146,13 +146,19 @@
   function driveStatusRows(st) {
     var status;
     if (st.syncing) status = 'Synkar …';
-    else if (st.connected) status = 'Ansluten' + (st.email ? ' som ' + st.email : '');
-    else if (st.email) status = 'Utloggad (' + st.email + ')';
+    else if (st.connected) status = 'Ansluten';
+    else if (st.email) status = 'Utloggad';
     else status = 'Inte ansluten';
 
     var html = '<div class="totals" style="margin-bottom:12px">'
-      + '<div class="totals-row"><span class="muted">Status</span><span>' + U.esc(status) + '</span></div>'
-      + '<div class="totals-row"><span class="muted">Senast synkad</span><span>'
+      + '<div class="totals-row"><span class="muted">Status</span><span>' + U.esc(status) + '</span></div>';
+    /* E-postadressen pa egen rad som far radbrytas - i statusraden trycker
+       den ut hela sidan i sidled pa en smal mobil. */
+    if (st.email) {
+      html += '<div class="totals-row wrap"><span class="muted">Konto</span><span>'
+        + U.esc(st.email) + '</span></div>';
+    }
+    html += '<div class="totals-row"><span class="muted">Senast synkad</span><span>'
       + U.esc(st.lastSync ? syncTime(st.lastSync) : 'Aldrig') + '</span></div>';
     if (st.dirty && st.lastSync) {
       html += '<div class="totals-row"><span class="muted">Sedan dess</span>'
