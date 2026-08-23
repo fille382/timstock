@@ -26,6 +26,7 @@
       + field('co-email', 'E-post', co.email, 'email')
       + field('co-phone', 'Telefon', co.phone, 'tel')
       + field('co-bankgiro', 'Bankgiro', co.bankgiro)
+      + field('co-swish', 'Swish-nummer', co.swish, 'tel')
       + field('co-iban', 'IBAN', co.iban)
       + field('co-bic', 'BIC/Swift', co.bic)
       + '<label class="check"><input type="checkbox" id="co-fskatt"' + (co.fskatt ? ' checked' : '') + '>'
@@ -207,7 +208,8 @@
           name: val(el, '#co-name'), orgnr: val(el, '#co-orgnr'), vatnr: val(el, '#co-vatnr'),
           address: val(el, '#co-address'), zip: val(el, '#co-zip'), city: val(el, '#co-city'),
           email: val(el, '#co-email'), phone: val(el, '#co-phone'),
-          bankgiro: val(el, '#co-bankgiro'), iban: val(el, '#co-iban'), bic: val(el, '#co-bic'),
+          bankgiro: val(el, '#co-bankgiro'), swish: val(el, '#co-swish'),
+          iban: val(el, '#co-iban'), bic: val(el, '#co-bic'),
           fskatt: el.querySelector('#co-fskatt').checked,
           vatExempt: el.querySelector('#co-vatexempt').checked
         });

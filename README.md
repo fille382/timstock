@@ -371,8 +371,11 @@ animation i systeminställningarna.
 Öppna fakturan och tryck **Skicka (sms/mejl)**. Appen bygger fakturan som en
 PDF-fil och öppnar telefonens delningsmeny — där väljer du Meddelanden (sms),
 mejlappen eller vad du vill, med filen och en färdig följetext (fakturanummer,
-förfallodatum, belopp och bankgiro) på plats. Inget skickas av appen själv;
-du trycker skicka i appen du valde.
+förfallodatum, belopp, bankgiro och Swish-nummer) på plats. Inget skickas av
+appen själv; du trycker skicka i appen du valde.
+
+Swish-numret fylls i under **Inställningar** och hamnar då både i följetexten
+och i fakturans betalningsruta, bredvid bankgirot.
 
 I en webbläsare utan fildelning (t.ex. äldre datorwebbläsare) laddas PDF:en
 ner i stället, och har kunden en mejladress öppnas ett mejlutkast — filen är

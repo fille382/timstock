@@ -1409,6 +1409,7 @@
     html += '<div class="inv-foot">'
       + '<div><b>Betalning</b><br>'
       + (co.bankgiro ? 'Bankgiro ' + U.esc(co.bankgiro) + '<br>' : '')
+      + (co.swish ? 'Swish ' + U.esc(co.swish) + '<br>' : '')
       + (co.iban ? 'IBAN ' + U.esc(co.iban) + '<br>' : '')
       + (co.bic ? 'BIC ' + U.esc(co.bic) + '<br>' : '')
       + 'Ange fakturanummer ' + U.esc(inv.number) + ' som referens.</div>'
@@ -1455,6 +1456,7 @@
         ? 'Omvänd betalningsskyldighet för mervärdesskatt gäller.\n' : '')
       + 'Att betala: ' + U.money(inv.total) + '\n\n'
       + (co.bankgiro ? 'Bankgiro: ' + co.bankgiro + '\n' : '')
+      + (co.swish ? 'Swish: ' + co.swish + '\n' : '')
       + '\nMed vänlig hälsning\n' + (co.name || '');
   }
 

@@ -404,6 +404,7 @@
     var pay = [
       { t: 'Betalning', bold: true },
       { t: co.bankgiro ? 'Bankgiro ' + co.bankgiro : '' },
+      { t: co.swish ? 'Swish ' + co.swish : '' },
       { t: co.iban ? 'IBAN ' + co.iban : '' },
       { t: co.bic ? 'BIC ' + co.bic : '' },
       { t: 'Ange fakturanummer ' + inv.number + ' som referens.' }

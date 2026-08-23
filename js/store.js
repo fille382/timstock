@@ -10,7 +10,7 @@
       version: 1,
       company: {
         name: '', orgnr: '', vatnr: '', address: '', zip: '', city: '',
-        email: '', phone: '', bankgiro: '', iban: '', bic: '', fskatt: true,
+        email: '', phone: '', bankgiro: '', swish: '', iban: '', bic: '', fskatt: true,
         /* Omsattning under 120 000 kr/ar: ingen moms pa fakturorna, inga
            momsavdrag, ingen momsdeklaration. */
         vatExempt: false
