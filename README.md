@@ -47,6 +47,31 @@ hemskärmen så beter den sig som en vanlig app.
 > Offlineläget (service worker) kräver `https` eller `localhost` — det aktiveras
 > alltså inte när du öppnar filen direkt med `file://`.
 
+## Marknadssida
+
+I `marknad/` ligger en fristående reklamsida för appen — `marknad/index.html`
+med skärmdumpar i `marknad/bilder/` (tagna med demodata) och `og.png` som blir
+förhandsbilden när länken delas via sms och sociala medier. Sidan länkar till
+appen med knappen **Öppna appen**.
+
+Hostas repot på GitHub Pages nås appen på `/timstock/` och reklamsidan på
+`/timstock/marknad/`. Byt då `og:image`-metataggen i `marknad/index.html` till
+sidans fullständiga adress (kommentaren i filen visar var).
+
+### Distribution: hemsida eller Play Store?
+
+Börja med hemsidan. Appen är redan en komplett PWA (manifest + service worker):
+den som öppnar länken kan lägga den på hemskärmen och får ikon, fullskärm och
+offlineläge — utan butik, granskning eller utvecklarkonto. GitHub Pages är
+gratis och en push bort.
+
+Play Store går att lägga till senare utan att röra koden: paketera den hostade
+PWA:n som en Trusted Web Activity med [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap)
+eller [PWABuilder](https://www.pwabuilder.com). Det kräver ett Google
+Play-utvecklarkonto (engångsavgift ~25 USD), en publik https-adress (samma
+hemsida) och en publicerad integritetspolicy. Butiken ger synlighet i sök —
+men appen måste ändå vara hostad, så hemsidan är steg ett i båda fallen.
+
 ## Så räknas timpriset
 
 Priset hämtas i den här ordningen, första träffen gäller:
