@@ -68,7 +68,10 @@ body {
   color: var(--ink);
   font: 17px/1.6 "Barlow", -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip; /* sidan får aldrig skrolla i sidled på mobil */
 }
+/* En grid-kolumn får aldrig tvingas bredare än skärmen av sitt innehåll */
+.hero-grid > *, .trio-grid > *, .deep-grid > *, .steps > * { min-width: 0; }
 img { max-width: 100%; display: block; }
 a { color: var(--accent); }
 
@@ -114,6 +117,7 @@ p { margin: 0; }
 /* ---------- Knappar ---------- */
 .btn {
   display: inline-block;
+  white-space: nowrap;
   font-family: "Barlow Condensed", sans-serif;
   font-size: 1.2rem; font-weight: 600; letter-spacing: .02em;
   padding: 12px 26px;
@@ -123,6 +127,8 @@ p { margin: 0; }
   transition: transform .12s ease, box-shadow .12s ease;
 }
 .btn:hover { transform: translateY(-1px); }
+@media (max-width: 420px) { .btn { padding: 10px 18px; font-size: 1.1rem; } }
+@media (max-width: 360px) { .btn { padding: 9px 12px; } .top-row { gap: 10px; } }
 .btn:focus-visible { outline: 3px solid var(--rule); outline-offset: 2px; }
 .btn-primary { background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); }
 .btn-ghost { border-color: var(--border); color: var(--ink); background: var(--surface); }
@@ -166,7 +172,9 @@ p { margin: 0; }
 .demo-wrap { position: relative; z-index: 2; margin-bottom: -70px; }
 @media (max-width: 879px) { .demo-wrap { margin-bottom: -50px; } }
 .demo-tag {
-  width: max-content;
+  width: fit-content;
+  max-width: 100%;
+  text-align: center;
   margin: 0 auto 12px;
   font-family: "Barlow Condensed", sans-serif;
   font-size: 1.05rem; font-weight: 700; letter-spacing: .08em;
