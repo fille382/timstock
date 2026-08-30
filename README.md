@@ -66,9 +66,11 @@ sparas. I `marknad/bilder/` finns skärmdumpar tagna med demodatan — de använ
 inte längre på sidan men är färdiga för en eventuell Play Store-listning — samt
 `og.png` som blir förhandsbilden när länken delas via sms och sociala medier.
 
-Hostas repot på GitHub Pages nås appen på `/timstock/` och reklamsidan på
-`/timstock/marknad/`. Byt då `og:image`-metataggen i `marknad/index.html` till
-sidans fullständiga adress (kommentaren i filen visar var).
+Repot ligger på GitHub Pages: appen på
+<https://fille382.github.io/timstock/index.html> och reklamsidan på
+<https://fille382.github.io/timstock/marknad/> (när den mergats till `main` —
+Pages bygger från `main`). Sidans **Öppna appen**-knappar och
+`og:image`-metataggen pekar på de adresserna.
 
 ### Distribution: hemsida eller Play Store?
 
