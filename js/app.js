@@ -225,6 +225,7 @@
     U.initSheet();
     hookBackButton();
     drawBackdrop();
+    showDemoBar();
 
     tabs.addEventListener('click', function (ev) {
       var b = ev.target.closest('.tab');
@@ -246,8 +247,23 @@
     registerServiceWorker();
   }
 
-  /* Offlinestöd fungerar bara när sidan serveras över https eller localhost. */
+  /* Demoläget markeras med en gul remsa under headern, så att ingen hinner
+     lägga in en veckas riktiga timmar i en app som glömmer allt vid
+     omladdning. Länken öppnas i toppfönstret — demon ligger ofta i en
+     iframe på marknadssidan. */
+  function showDemoBar() {
+    if (!S.isDemo()) return;
+    var bar = document.createElement('div');
+    bar.className = 'demobar no-print';
+    bar.innerHTML = 'Demoläge — testa fritt, inget sparas. '
+      + '<a href="index.html" target="_top">Börja på riktigt</a>';
+    document.body.insertBefore(bar, main);
+  }
+
+  /* Offlinestöd fungerar bara när sidan serveras över https eller localhost.
+     Demoläget hoppar över det — demon ska inte installera något alls. */
   function registerServiceWorker() {
+    if (S.isDemo()) return;
     if (!('serviceWorker' in navigator)) return;
     var ok = global.location.protocol === 'https:' || global.location.hostname === 'localhost';
     if (!ok) return;

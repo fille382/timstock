@@ -47,12 +47,24 @@ hemskärmen så beter den sig som en vanlig app.
 > Offlineläget (service worker) kräver `https` eller `localhost` — det aktiveras
 > alltså inte när du öppnar filen direkt med `file://`.
 
+## Demoläge
+
+Öppna appen med `?demo` i adressen (t.ex. `index.html?demo=1`) så startar den
+med låtsasdata — kunder, tidsposter och fakturor att klicka runt i. Ingenting
+sparas: `store.js` rör aldrig localStorage i demoläge, kvittofoton stannar i
+minnet, och Drive-synken är helt bortkopplad så att en demo aldrig kan skriva
+över en riktig säkerhetskopia. En gul remsa under headern visar att demot är
+igång, och en omladdning nollställer allt. Låtsasdatan ligger i `js/demo.js`
+och daterar sig själv utifrån dagens datum.
+
 ## Marknadssida
 
 I `marknad/` ligger en fristående reklamsida för appen — `marknad/index.html`
-med skärmdumpar i `marknad/bilder/` (tagna med demodata) och `og.png` som blir
-förhandsbilden när länken delas via sms och sociala medier. Sidan länkar till
-appen med knappen **Öppna appen**.
+med appen körande i demoläge direkt på sidan (en iframe mot
+`../index.html?demo=1`), så att besökaren kan testa på riktigt utan att något
+sparas. I `marknad/bilder/` finns skärmdumpar tagna med demodatan — de används
+inte längre på sidan men är färdiga för en eventuell Play Store-listning — samt
+`og.png` som blir förhandsbilden när länken delas via sms och sociala medier.
 
 Hostas repot på GitHub Pages nås appen på `/timstock/` och reklamsidan på
 `/timstock/marknad/`. Byt då `og:image`-metataggen i `marknad/index.html` till
@@ -429,6 +441,7 @@ bli några MB stor — varje synk laddar upp hela filen.
 | --- | --- |
 | `index.html` | Sidans stomme, flikar och bottenmeny |
 | `css/styles.css` | All formgivning, inklusive utskriftslayout |
+| `js/demo.js` | Låtsasdata för demoläget (`?demo`) — används av marknadssidan |
 | `js/store.js` | Datalager: kunder, projekt, tid, material, körningar, fakturor |
 | `js/ui.js` | Formatering, toast och formulärpanelen |
 | `js/pdf.js` | Bygger fakturans PDF-fil, utan bibliotek |

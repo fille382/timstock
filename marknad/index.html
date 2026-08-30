@@ -146,9 +146,9 @@ p { margin: 0; }
 .hero .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .smallprint { margin-top: 16px; font-size: .95rem; color: var(--muted); }
 
-/* Telefonram */
+/* Telefonram med appen levande inuti (demoläge — inget sparas) */
 .phone {
-  width: min(300px, 78vw);
+  width: min(340px, 88vw);
   border-radius: 42px;
   border: 10px solid #0d1526;
   background: #0d1526;
@@ -156,9 +156,33 @@ p { margin: 0; }
   overflow: hidden;
   margin: 0 auto;
 }
-.phone img { width: 100%; }
-.hero .phone { position: relative; z-index: 2; margin-bottom: -70px; }
-@media (max-width: 879px) { .hero .phone { margin-bottom: -50px; } }
+.phone iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 390 / 760;
+  border: 0;
+  background: #f4f5f7;
+}
+.demo-wrap { position: relative; z-index: 2; margin-bottom: -70px; }
+@media (max-width: 879px) { .demo-wrap { margin-bottom: -50px; } }
+.demo-tag {
+  width: max-content;
+  margin: 0 auto 12px;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.05rem; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--rule-ink);
+  background: var(--rule);
+  border-radius: 999px;
+  padding: 5px 18px;
+}
+.demo-note {
+  margin: 14px auto 0;
+  max-width: 340px;
+  text-align: center;
+  font-size: .95rem;
+  color: var(--muted);
+}
 
 /* ---------- Tre kort ---------- */
 .trio { background: var(--surface); border-top: 1px solid var(--border); padding: 120px 0 64px; }
@@ -183,21 +207,21 @@ p { margin: 0; }
 .card p { color: var(--muted); font-size: 1rem; }
 
 /* ---------- Funktionsblock ---------- */
-.features { padding: 72px 0 8px; }
-.feature {
-  display: grid; gap: 32px; align-items: center;
-  padding: 40px 0;
+.features { padding: 72px 0 40px; }
+.deep-grid { display: grid; gap: 18px; margin-top: 36px; }
+@media (min-width: 880px) { .deep-grid { grid-template-columns: 1fr 1fr; } }
+.deep {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
 }
-@media (min-width: 880px) {
-  .feature { grid-template-columns: 1fr 1fr; gap: 56px; padding: 56px 0; }
-  .feature.swap .feature-copy { order: 2; }
-}
-.feature h3 { font-size: clamp(1.6rem, 3.5vw, 2.1rem); font-weight: 700; }
-.feature p { margin-top: 14px; color: var(--muted); }
-.feature ul { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
-.feature li { padding-left: 26px; position: relative; color: var(--muted); }
-.feature li strong { color: var(--ink); font-weight: 600; }
-.feature li::before {
+.deep h3 { font-size: 1.55rem; font-weight: 700; }
+.deep > p { margin-top: 12px; color: var(--muted); }
+.deep ul { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.deep li { padding-left: 26px; position: relative; color: var(--muted); }
+.deep li strong { color: var(--ink); font-weight: 600; }
+.deep li::before {
   content: "";
   position: absolute; left: 0; top: .42em;
   width: 14px; height: 8px;
@@ -225,11 +249,11 @@ p { margin: 0; }
   background: var(--band); color: var(--band-ink); overflow: hidden;
   border-top: 1px solid var(--band-border); border-bottom: 1px solid var(--band-border);
 }
-.band-grid { display: grid; gap: 40px; align-items: center; padding: 72px 0; }
-@media (min-width: 880px) { .band-grid { grid-template-columns: 1fr 1fr; gap: 56px; } }
+.band-inner { max-width: 760px; padding: 72px 0; }
 .band h2 { color: var(--band-ink); }
 .band p { color: var(--band-muted); margin-top: 16px; }
 .band ul { margin: 22px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+@media (min-width: 720px) { .band ul { grid-template-columns: 1fr 1fr; gap: 14px 32px; } }
 .band li { padding-left: 26px; position: relative; color: var(--band-muted); }
 .band li strong { color: var(--band-ink); font-weight: 600; }
 .band li::before {
@@ -240,7 +264,6 @@ p { margin: 0; }
   border-bottom: 3px solid var(--rule);
   transform: rotate(-45deg);
 }
-.band .phone { border-color: #253045; background: #253045; }
 
 /* ---------- Installation ---------- */
 .install { padding: 72px 0; }
@@ -315,8 +338,13 @@ footer .git { margin-left: auto; }
       </div>
       <p class="smallprint">Ingen registrering. Inget abonnemang. Din data stannar i din telefon.</p>
     </div>
-    <div class="phone">
-      <img src="bilder/tidrapport.png" alt="Tidrapporten i Timstock: dagens poster med timmar, körning och summeringar" width="780" height="1688">
+    <div class="demo-wrap" id="demo">
+      <p class="demo-tag">Testa direkt — det här är appen</p>
+      <div class="phone">
+        <iframe src="../index.html?demo=1" title="Timstock i demoläge — testa appen med låtsasdata"></iframe>
+      </div>
+      <p class="demo-note">Tryck, bläddra, registrera tid, öppna en faktura — allt är
+      låtsasdata och inget sparas. Ladda om sidan så börjar demon om.</p>
     </div>
   </div>
 </section>
@@ -352,29 +380,23 @@ footer .git { margin-left: auto; }
 
 <section class="features">
   <div class="wrap">
+    <h2>Det svåra sköter appen</h2>
+    <div class="deep-grid">
 
-    <div class="feature">
-      <div class="feature-copy">
+      <div class="deep">
         <h3>Fakturan gör sig själv</h3>
         <p>Allt du registrerat ligger klart när det är dags att fakturera. Välj
         att specificera varje tidspost eller summera per projekt — materialet
         specificeras alltid rad för rad, så kunden ser vad som är vad.</p>
         <ul>
-          <li><strong>Momsunderlaget räknar medan du jobbar</strong> — utgående och
-          ingående moms per kvartal, med deadline-påminnelse inför deklarationen.</li>
+          <li><strong>PDF via sms eller mejl</strong> — med bankgiro, Swish och
+          förfallodatum i följetexten.</li>
           <li><strong>Status på varje faktura</strong> — utkast, skickad, betald.
           Rutan överst visar vad som är obetalt och vilken ROT du inte sökt än.</li>
-          <li><strong>Årssammanställning</strong> — intäkter, kostnader och resultat,
-          färdigt som underlag till NE-bilagan.</li>
         </ul>
       </div>
-      <div class="phone">
-        <img src="bilder/fakturor.png" alt="Fakturalistan i Timstock med status, obetalt och momsunderlag per kvartal" width="780" height="1688">
-      </div>
-    </div>
 
-    <div class="feature swap">
-      <div class="feature-copy">
+      <div class="deep">
         <h3>ROT räknas rätt — och bara på arbetet</h3>
         <p>Märk kunden som privatperson med ROT, så dras avdraget direkt på
         fakturan enligt fakturamodellen. Aldrig på material, mil eller
@@ -384,17 +406,10 @@ footer .git { margin-left: auto; }
           arbetskostnad och belopp att skriva in i e-tjänsten när kunden betalat.</li>
           <li><strong>Koll på kundens utrymme</strong> — appen varnar när årets
           tak börjar ta slut hos dina fakturor.</li>
-          <li><strong>Funkar med fastpris</strong> — appen håller isär arbete och
-          material även i en klumpsumma.</li>
         </ul>
       </div>
-      <div class="phone">
-        <img src="bilder/faktura-rot.png" alt="En ROT-faktura i Timstock med avdraget som egen rad och färdigt ROT-underlag" width="780" height="1688">
-      </div>
-    </div>
 
-    <div class="feature">
-      <div class="feature-copy">
+      <div class="deep">
         <h3>Kunder och projekt med rätt pris</h3>
         <p>Timpris per kund eller per projekt, och fastpris när ni avtalat en
         summa. Fastprisjobbet visar efteråt vad du i praktiken fick betalt per
@@ -406,11 +421,21 @@ footer .git { margin-left: auto; }
           kunden på en gång. Resten ligger kvar till nästa faktura.</li>
         </ul>
       </div>
-      <div class="phone">
-        <img src="bilder/kunder.png" alt="Kundlistan i Timstock med timpris, ROT-märkning och ofakturerat per kund" width="780" height="1688">
-      </div>
-    </div>
 
+      <div class="deep">
+        <h3>Momsen räknar sig själv</h3>
+        <p>Längst ner bland fakturorna står momsunderlaget och räknar medan du
+        jobbar — siffrorna deklarationen frågar efter, per kvartal eller månad,
+        med deadline-påminnelse så att den 12:e aldrig kommer som en överraskning.</p>
+        <ul>
+          <li><strong>Utgifter med kvittofoton</strong> — verktyg, drivmedel och
+          telefon fotas in och räknas med i ingående momsen.</li>
+          <li><strong>Årssammanställning</strong> — intäkter, kostnader och resultat,
+          färdigt som underlag till NE-bilagan.</li>
+        </ul>
+      </div>
+
+    </div>
   </div>
 </section>
 
@@ -436,23 +461,18 @@ footer .git { margin-left: auto; }
 </section>
 
 <section class="band">
-  <div class="wrap band-grid">
-    <div>
-      <h2>Din data är din. Punkt.</h2>
-      <p>Timstock har ingen server, inget konto och inga spårare. Allt sparas
-      lokalt i din telefon, och appen fungerar även när täckningen försvinner
-      nere i källaren.</p>
-      <ul>
-        <li><strong>Ingen inloggning</strong> — öppna appen och börja registrera.</li>
-        <li><strong>Funkar offline</strong> — tidrapporten bryr sig inte om mottagningen.</li>
-        <li><strong>Säkerhetskopia när du vill</strong> — exportera som fil, eller koppla
-        ditt Google-konto så synkas en kopia till din egen Drive, automatiskt.</li>
-        <li><strong>Mörkt läge</strong> — följer telefonens inställning.</li>
-      </ul>
-    </div>
-    <div class="phone">
-      <img src="bilder/tidrapport-mork.png" alt="Timstock i mörkt läge" width="780" height="1688">
-    </div>
+  <div class="wrap band-inner">
+    <h2>Din data är din. Punkt.</h2>
+    <p>Timstock har ingen server, inget konto och inga spårare. Allt sparas
+    lokalt i din telefon, och appen fungerar även när täckningen försvinner
+    nere i källaren.</p>
+    <ul>
+      <li><strong>Ingen inloggning</strong> — öppna appen och börja registrera.</li>
+      <li><strong>Funkar offline</strong> — tidrapporten bryr sig inte om mottagningen.</li>
+      <li><strong>Säkerhetskopia när du vill</strong> — exportera som fil, eller koppla
+      ditt Google-konto så synkas en kopia till din egen Drive, automatiskt.</li>
+      <li><strong>Mörkt läge</strong> — följer telefonens inställning.</li>
+    </ul>
   </div>
 </section>
 

@@ -66,7 +66,18 @@
     return d;
   }
 
+  /* Demoläget (?demo i adressen, se demo.js) lever helt i minnet: inget
+     läses från eller skrivs till localStorage, så riktig data på samma
+     adress rörs aldrig och demon nollställs vid varje omladdning. */
+  function isDemo() {
+    return !!(global.TimstockDemo && global.TimstockDemo.active);
+  }
+
   function load() {
+    if (isDemo()) {
+      data = migrate(global.TimstockDemo.data());
+      return data;
+    }
     try {
       var stored = global.localStorage.getItem(KEY);
       if (stored === null) stored = global.localStorage.getItem(LEGACY_KEY);
@@ -79,6 +90,10 @@
   }
 
   function save() {
+    if (isDemo()) {
+      listeners.forEach(function (fn) { fn(data); });
+      return true;
+    }
     try {
       global.localStorage.setItem(KEY, JSON.stringify(data));
     } catch (err) {
@@ -644,6 +659,10 @@
      IndexedDB, som rymmer langt mer. Posterna (material/utgifter) bar bara
      ett photoId; sjalva bilden hamtas harifran. */
 
+  /* Demoläget håller även fotona i minnet — IndexedDB överlever ju
+     omladdning och delas med den riktiga appen på samma adress. */
+  var demoPhotos = isDemo() ? {} : null;
+
   var dbPromise = null;
 
   function photoDB() {
@@ -670,24 +689,33 @@
   }
 
   function savePhoto(id, blob) {
+    if (demoPhotos) { demoPhotos[id] = blob; return Promise.resolve(); }
     return photoOp('readwrite', function (s) { return s.put(blob, id); });
   }
 
   function getPhoto(id) {
     if (!id) return Promise.resolve(null);
+    if (demoPhotos) return Promise.resolve(demoPhotos[id] || null);
     return photoOp('readonly', function (s) { return s.get(id); });
   }
 
   function deletePhoto(id) {
     if (!id) return Promise.resolve();
+    if (demoPhotos) { delete demoPhotos[id]; return Promise.resolve(); }
     return photoOp('readwrite', function (s) { return s.delete(id); });
   }
 
   function clearPhotos() {
+    if (demoPhotos) { demoPhotos = {}; return Promise.resolve(); }
     return photoOp('readwrite', function (s) { return s.clear(); });
   }
 
   function allPhotos() {
+    if (demoPhotos) {
+      return Promise.resolve(Object.keys(demoPhotos).map(function (id) {
+        return { id: id, blob: demoPhotos[id] };
+      }));
+    }
     return photoDB().then(function (db) {
       return new Promise(function (resolve, reject) {
         var out = [];
@@ -971,7 +999,7 @@
   function raw() { return data; }
 
   global.Store = {
-    load: load, save: save, onChange: onChange, uid: uid, raw: raw, todayISO: todayISO,
+    load: load, save: save, onChange: onChange, uid: uid, raw: raw, todayISO: todayISO, isDemo: isDemo,
     clients: clients, client: client, saveClient: saveClient, archiveClient: archiveClient, deleteClient: deleteClient,
     projects: projects, project: project, saveProject: saveProject, archiveProject: archiveProject, deleteProject: deleteProject,
     entries: entries, entry: entry, saveEntry: saveEntry, deleteEntry: deleteEntry,

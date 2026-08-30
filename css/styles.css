@@ -767,6 +767,21 @@ input:focus, select:focus, textarea:focus {
   .invoice { padding: 40px; }
 }
 
+/* ---------- Demoläge ---------- */
+
+/* Tumstocksgul remsa under headern - samma i ljust och mörkt tema. */
+.demobar {
+  background: #f7c948;
+  color: #253045;
+  font-size: .9rem;
+  font-weight: 500;
+  text-align: center;
+  padding: 7px 16px;
+  border-bottom: 1px solid #b8871a;
+}
+
+.demobar a { color: inherit; font-weight: 650; }
+
 /* ---------- Utskrift ---------- */
 
 @media print {
