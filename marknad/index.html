@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Timstock — gratis tidrapportering och fakturering för hantverkare. Tid, material, körningar och fakturor med ROT och omvänd byggmoms. Ingen server, ingen registrering.">
+<meta name="description" content="Timstock — tidrapportering och fakturering för hantverkare. Tid, material, körningar och fakturor med ROT och omvänd byggmoms. Ingen server, ingen registrering — gratis för de första användarna.">
 <!-- Byt till absolut URL när sidan hostas, t.ex. https://dittnamn.github.io/timstock/marknad/bilder/og.png -->
 <meta property="og:title" content="Timstock — timmarna på plats, fakturan på vägen hem">
-<meta property="og:description" content="Gratis tidrapportering och fakturering för hantverkare. ROT, omvänd byggmoms och momsunderlag inbyggt. Din data stannar hos dig.">
+<meta property="og:description" content="Tidrapportering och fakturering för hantverkare — gratis för de första användarna. ROT, omvänd byggmoms och momsunderlag inbyggt. Din data stannar hos dig.">
 <meta property="og:image" content="bilder/og.png">
 <title>Timstock — tid och faktura för hantverkare</title>
 <link rel="icon" href="../icon.svg" type="image/svg+xml">
@@ -296,7 +296,13 @@ p { margin: 0; }
   font-family: "Barlow Condensed", sans-serif;
   font-size: clamp(3.4rem, 10vw, 5.5rem); font-weight: 700; line-height: 1;
 }
-.price .big span { color: var(--accent); }
+.price .big span {
+  display: block;
+  font-size: .38em;
+  font-weight: 600;
+  color: var(--accent);
+  margin-top: 6px;
+}
 .price p { color: var(--muted); max-width: 36em; margin: 18px auto 30px; }
 
 /* ---------- Sidfot ---------- */
@@ -327,7 +333,7 @@ footer .git { margin-left: auto; }
 <section class="hero">
   <div class="wrap hero-grid">
     <div>
-      <p class="eyebrow">Gratis<span class="dot">·</span>Svensk<span class="dot">·</span>Funkar offline</p>
+      <p class="eyebrow">Gratis just nu<span class="dot">·</span>Svensk<span class="dot">·</span>Funkar offline</p>
       <h1>Timmarna på plats.<br>Fakturan på vägen hem.</h1>
       <p class="lead">Timstock är tidrapportering och fakturering för dig som jobbar
       med händerna. Registrera tid, material och körningar direkt i mobilen —
@@ -336,7 +342,7 @@ footer .git { margin-left: auto; }
         <a class="btn btn-primary" href="../index.html">Öppna appen</a>
         <a class="btn btn-ghost" href="#funktioner">Se hur den funkar</a>
       </div>
-      <p class="smallprint">Ingen registrering. Inget abonnemang. Din data stannar i din telefon.</p>
+      <p class="smallprint">Ingen registrering. Gratis för de första användarna. Din data stannar i din telefon.</p>
     </div>
     <div class="demo-wrap" id="demo">
       <p class="demo-tag">Testa direkt — det här är appen</p>
@@ -493,7 +499,7 @@ footer .git { margin-left: auto; }
       <div class="step">
         <h3>Klart</h3>
         <p>Egen ikon, fullskärm och offlineläge — den beter sig som vilken app
-        som helst. Fast utan konto och utan kostnad.</p>
+        som helst. Fast utan konto och krångel.</p>
       </div>
     </div>
   </div>
@@ -501,10 +507,10 @@ footer .git { margin-left: auto; }
 
 <section class="price">
   <div class="wrap">
-    <p class="big">0 kr<span>/månad</span></p>
-    <p>Inget abonnemang, ingen gratisperiod som tar slut, inga funktioner bakom
-    betalvägg. Timstock är öppen källkod — koden ligger öppet på GitHub och
-    appen är gratis att använda, för alltid.</p>
+    <p class="big">Gratis<span>för de första användarna</span></p>
+    <p>Timstock är i tidig fas. Du som börjar nu använder appen gratis och är
+    med och formar vad den ska bli — längre fram kommer den att kosta. Bästa
+    läget att kliva på är alltså nu.</p>
     <a class="btn btn-primary" href="../index.html">Öppna appen</a>
   </div>
 </section>
