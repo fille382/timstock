@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Timstock — tidrapportering och fakturering för hantverkare. Tid, material, körningar och fakturor med ROT och omvänd byggmoms. Ingen server, ingen registrering — gratis för de första användarna.">
+<meta property="og:title" content="Timstock — timmarna på plats, fakturan på vägen hem">
+<meta property="og:description" content="Tidrapportering och fakturering för hantverkare — gratis för de första användarna. ROT, omvänd byggmoms och momsunderlag inbyggt. Din data stannar hos dig.">
+<meta property="og:url" content="https://fille382.github.io/timstock/marknad/">
+<meta property="og:image" content="https://fille382.github.io/timstock/marknad/bilder/og.png">
+<title>Timstock — tid och faktura för hantverkare</title>
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+:root {
+  --paper: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --border: #e2e8f0;
+  --ink: #0f172a;
+  --muted: #5b6b82;
+  --accent: #2563eb;
+  --accent-deep: #1e40af;
+  --accent-ink: #ffffff;
+  --accent-soft: #eff6ff;
+  --rule: #f7c948;      /* tumstocksgult */
+  --rule-ink: #253045;  /* graderingen på tumstocken */
+  --band: #0b1120;      /* mörka bandet, samma i båda teman */
+  --band-ink: #e7ecf5;
+  --band-muted: #93a1bb;
+  --band-border: #2a3550;
+  --shadow: 0 1px 2px rgba(15,23,42,.06), 0 12px 32px rgba(15,23,42,.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0b1120;
+    --surface: #151d2e;
+    --surface-2: #1b2438;
+    --border: #2a3550;
+    --ink: #e7ecf5;
+    --muted: #93a1bb;
+    --accent: #4f8cff;
+    --accent-deep: #7faaff;
+    --accent-ink: #06101f;
+    --accent-soft: #16233d;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0b1120;
+  --surface: #151d2e;
+  --surface-2: #1b2438;
+  --border: #2a3550;
+  --ink: #e7ecf5;
+  --muted: #93a1bb;
+  --accent: #4f8cff;
+  --accent-deep: #7faaff;
+  --accent-ink: #06101f;
+  --accent-soft: #16233d;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.35);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 17px/1.6 "Barlow", -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip; /* sidan får aldrig skrolla i sidled på mobil */
+}
+/* En grid-kolumn får aldrig tvingas bredare än skärmen av sitt innehåll */
+.hero-grid > *, .trio-grid > *, .deep-grid > *, .steps > * { min-width: 0; }
+img { max-width: 100%; display: block; }
+a { color: var(--accent); }
+
+h1, h2, h3 {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  line-height: 1.08;
+  letter-spacing: .005em;
+  margin: 0;
+  text-wrap: balance;
+}
+h1 { font-size: clamp(2.6rem, 7vw, 4.2rem); font-weight: 700; }
+h2 { font-size: clamp(1.9rem, 4.5vw, 2.7rem); font-weight: 700; }
+h3 { font-size: 1.35rem; font-weight: 600; }
+p { margin: 0; }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+/* Tumstocken: gult band med gradering — mm-streck, längre var femte, längst var tionde. */
+.rule {
+  height: 30px;
+  background:
+    repeating-linear-gradient(90deg, var(--rule-ink) 0 2px, transparent 2px 60px),
+    repeating-linear-gradient(90deg, transparent 0 28px, var(--rule-ink) 28px 30px, transparent 30px 60px),
+    repeating-linear-gradient(90deg, transparent 0 4px, var(--rule-ink) 4px 5px, transparent 5px 10px),
+    linear-gradient(180deg, #fbd968, var(--rule) 55%, #e0ab27);
+  background-size: auto 100%, auto 100%, auto 46%, auto 100%;
+  background-repeat: repeat-x;
+  background-position: 0 0, 0 0, 0 0, 0 0;
+  border-bottom: 2px solid #b8871a;
+}
+.rule.flip { transform: scaleY(-1); border-bottom: 0; border-top: 2px solid #b8871a; }
+
+/* ---------- Sidhuvud ---------- */
+.top { border-bottom: 1px solid var(--border); background: var(--surface); }
+.top-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; }
+.top-row img { width: 34px; height: 34px; border-radius: 8px; }
+.brand {
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.5rem; font-weight: 700; letter-spacing: .01em;
+}
+.top-row .btn { margin-left: auto; }
+
+/* ---------- Knappar ---------- */
+.btn {
+  display: inline-block;
+  white-space: nowrap;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.2rem; font-weight: 600; letter-spacing: .02em;
+  padding: 12px 26px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  text-decoration: none;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.btn:hover { transform: translateY(-1px); }
+@media (max-width: 420px) { .btn { padding: 10px 18px; font-size: 1.1rem; } }
+@media (max-width: 360px) { .btn { padding: 9px 12px; } .top-row { gap: 10px; } }
+.btn:focus-visible { outline: 3px solid var(--rule); outline-offset: 2px; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); }
+.btn-ghost { border-color: var(--border); color: var(--ink); background: var(--surface); }
+
+/* ---------- Hjälte ---------- */
+.hero-grid {
+  display: grid; gap: 40px; align-items: center;
+  padding: 56px 0 24px;
+}
+@media (min-width: 880px) {
+  .hero-grid { grid-template-columns: 1.15fr .85fr; padding: 72px 0 0; }
+}
+.eyebrow {
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 600; font-size: 1.02rem; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent);
+  margin-bottom: 14px;
+}
+.eyebrow .dot { color: var(--muted); padding: 0 6px; }
+.hero p.lead { margin: 20px 0 28px; font-size: 1.15rem; color: var(--muted); max-width: 34em; }
+.hero .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.smallprint { margin-top: 16px; font-size: .95rem; color: var(--muted); }
+
+/* Telefonram med appen levande inuti (demoläge — inget sparas) */
+.phone {
+  width: min(340px, 88vw);
+  border-radius: 42px;
+  border: 10px solid #0d1526;
+  background: #0d1526;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  margin: 0 auto;
+}
+.phone iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 390 / 760;
+  border: 0;
+  background: #f4f5f7;
+}
+.demo-wrap { position: relative; z-index: 2; margin-bottom: -70px; }
+@media (max-width: 879px) { .demo-wrap { margin-bottom: -50px; } }
+.demo-tag {
+  width: fit-content;
+  max-width: 100%;
+  text-align: center;
+  margin: 0 auto 12px;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.05rem; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--rule-ink);
+  background: var(--rule);
+  border-radius: 999px;
+  padding: 5px 18px;
+}
+.demo-note {
+  margin: 14px auto 0;
+  max-width: 340px;
+  text-align: center;
+  font-size: .95rem;
+  color: var(--muted);
+}
+
+/* ---------- Tre kort ---------- */
+.trio { background: var(--surface); border-top: 1px solid var(--border); padding: 120px 0 64px; }
+.trio-grid { display: grid; gap: 18px; margin-top: 36px; }
+@media (min-width: 720px) { .trio-grid { grid-template-columns: repeat(3, 1fr); } }
+.card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  display: grid; gap: 10px; align-content: start;
+}
+.card .num {
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 700; font-size: 1rem; letter-spacing: .1em;
+  color: var(--rule-ink);
+  background: var(--rule);
+  border-radius: 6px;
+  padding: 2px 10px;
+  width: max-content;
+}
+.card p { color: var(--muted); font-size: 1rem; }
+
+/* ---------- Funktionsblock ---------- */
+.features { padding: 72px 0 40px; }
+.deep-grid { display: grid; gap: 18px; margin-top: 36px; }
+@media (min-width: 880px) { .deep-grid { grid-template-columns: 1fr 1fr; } }
+.deep {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+}
+.deep h3 { font-size: 1.55rem; font-weight: 700; }
+.deep > p { margin-top: 12px; color: var(--muted); }
+.deep ul { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.deep li { padding-left: 26px; position: relative; color: var(--muted); }
+.deep li strong { color: var(--ink); font-weight: 600; }
+.deep li::before {
+  content: "";
+  position: absolute; left: 0; top: .42em;
+  width: 14px; height: 8px;
+  border-left: 3px solid var(--accent);
+  border-bottom: 3px solid var(--accent);
+  transform: rotate(-45deg);
+}
+
+/* ---------- Regel-chips ---------- */
+.rules-strip { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 64px 0; }
+.rules-strip p.sub { color: var(--muted); margin-top: 12px; max-width: 40em; }
+.chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+.chip {
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.1rem; font-weight: 600; letter-spacing: .02em;
+  border: 1.5px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 8px 18px;
+}
+.chip.hot { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-deep); }
+
+/* ---------- Mörka bandet: integritet ---------- */
+.band {
+  background: var(--band); color: var(--band-ink); overflow: hidden;
+  border-top: 1px solid var(--band-border); border-bottom: 1px solid var(--band-border);
+}
+.band-inner { max-width: 760px; padding: 72px 0; }
+.band h2 { color: var(--band-ink); }
+.band p { color: var(--band-muted); margin-top: 16px; }
+.band ul { margin: 22px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+@media (min-width: 720px) { .band ul { grid-template-columns: 1fr 1fr; gap: 14px 32px; } }
+.band li { padding-left: 26px; position: relative; color: var(--band-muted); }
+.band li strong { color: var(--band-ink); font-weight: 600; }
+.band li::before {
+  content: "";
+  position: absolute; left: 0; top: .42em;
+  width: 14px; height: 8px;
+  border-left: 3px solid var(--rule);
+  border-bottom: 3px solid var(--rule);
+  transform: rotate(-45deg);
+}
+
+/* ---------- Installation ---------- */
+.install { padding: 72px 0; }
+.steps { display: grid; gap: 18px; margin-top: 36px; counter-reset: steg; }
+@media (min-width: 720px) { .steps { grid-template-columns: repeat(3, 1fr); } }
+.step {
+  counter-increment: steg;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+}
+.step::before {
+  content: counter(steg);
+  display: grid; place-items: center;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--rule);
+  color: var(--rule-ink);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.4rem; font-weight: 700;
+  margin-bottom: 14px;
+}
+.step h3 { margin-bottom: 8px; }
+.step p { color: var(--muted); font-size: 1rem; }
+
+/* ---------- Pris ---------- */
+.price { text-align: center; padding: 24px 0 88px; }
+.price .big {
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: clamp(3.4rem, 10vw, 5.5rem); font-weight: 700; line-height: 1;
+}
+.price .big span {
+  display: block;
+  font-size: .38em;
+  font-weight: 600;
+  color: var(--accent);
+  margin-top: 6px;
+}
+.price p { color: var(--muted); max-width: 36em; margin: 18px auto 30px; }
+
+/* ---------- Sidfot ---------- */
+footer { border-top: 1px solid var(--border); background: var(--surface); padding: 0 0 40px; }
+.foot-row { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; }
+.foot-row .brand { font-size: 1.2rem; }
+footer p { color: var(--muted); font-size: .95rem; }
+footer .git { margin-left: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .btn { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="rule" aria-hidden="true"></div>
+
+<header class="top">
+  <div class="wrap top-row">
+    <img src="../icon.svg" alt="">
+    <span class="brand">Timstock</span>
+    <a class="btn btn-primary" href="https://fille382.github.io/timstock/index.html#/">Öppna appen</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow">Gratis just nu<span class="dot">·</span>Svensk<span class="dot">·</span>Funkar offline</p>
+      <h1>Timmarna på plats.<br>Fakturan på vägen hem.</h1>
+      <p class="lead">Timstock är tidrapportering och fakturering för dig som jobbar
+      med händerna. Registrera tid, material och körningar direkt i mobilen —
+      och gör faktura av alltihop innan du svängt ut från jobbet.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://fille382.github.io/timstock/index.html#/">Öppna appen</a>
+        <a class="btn btn-ghost" href="#funktioner">Se hur den funkar</a>
+      </div>
+      <p class="smallprint">Ingen registrering. Gratis för de första användarna. Din data stannar i din telefon.</p>
+    </div>
+    <div class="demo-wrap" id="demo">
+      <p class="demo-tag">Testa direkt — det här är appen</p>
+      <div class="phone">
+        <iframe src="../index.html?demo=1" title="Timstock i demoläge — testa appen med låtsasdata"></iframe>
+      </div>
+      <p class="demo-note">Tryck, bläddra, registrera tid, öppna en faktura — allt är
+      låtsasdata och inget sparas. Ladda om sidan så börjar demon om.</p>
+    </div>
+  </div>
+</section>
+
+<section class="trio" id="funktioner">
+  <div class="wrap">
+    <h2>Allt du gör ute — samlat i fickan</h2>
+    <div class="trio-grid">
+      <div class="card">
+        <span class="num">TID</span>
+        <h3>Åtta timmar, en rad</h3>
+        <p>Datum, kund, timmar och en kommentar om vad du gjorde. Registrerat på
+        tio sekunder medan du låser bilen — och tidrapporten räknar ihop dagen,
+        månaden och det ofakturerade åt dig.</p>
+      </div>
+      <div class="card">
+        <span class="num">MATERIAL &amp; KÖRNING</span>
+        <h3>Utläggen följer med</h3>
+        <p>Trallvirket med påslag, milen med ersättning och framkörningsavgiften.
+        Fota kvittot direkt i appen, så är pärmen digital. Körjournalen får du
+        på köpet i CSV-exporten.</p>
+      </div>
+      <div class="card">
+        <span class="num">FAKTURA</span>
+        <h3>Av allt ofakturerat</h3>
+        <p>Välj kund, välj poster, klart. Fakturan blir en PDF som skickas med
+        sms eller mejl — med bankgiro, Swish-nummer och förfallodatum redan
+        ifyllda.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="features">
+  <div class="wrap">
+    <h2>Det svåra sköter appen</h2>
+    <div class="deep-grid">
+
+      <div class="deep">
+        <h3>Fakturan gör sig själv</h3>
+        <p>Allt du registrerat ligger klart när det är dags att fakturera. Välj
+        att specificera varje tidspost eller summera per projekt — materialet
+        specificeras alltid rad för rad, så kunden ser vad som är vad.</p>
+        <ul>
+          <li><strong>PDF via sms eller mejl</strong> — med bankgiro, Swish och
+          förfallodatum i följetexten.</li>
+          <li><strong>Status på varje faktura</strong> — utkast, skickad, betald.
+          Rutan överst visar vad som är obetalt och vilken ROT du inte sökt än.</li>
+        </ul>
+      </div>
+
+      <div class="deep">
+        <h3>ROT räknas rätt — och bara på arbetet</h3>
+        <p>Märk kunden som privatperson med ROT, så dras avdraget direkt på
+        fakturan enligt fakturamodellen. Aldrig på material, mil eller
+        framkörning — bara på arbetskostnaden, precis som Skatteverket vill.</p>
+        <ul>
+          <li><strong>ROT-underlaget färdigt</strong> — fastighetsbeteckning,
+          arbetskostnad och belopp att skriva in i e-tjänsten när kunden betalat.</li>
+          <li><strong>Koll på kundens utrymme</strong> — appen varnar när årets
+          tak börjar ta slut hos dina fakturor.</li>
+        </ul>
+      </div>
+
+      <div class="deep">
+        <h3>Kunder och projekt med rätt pris</h3>
+        <p>Timpris per kund eller per projekt, och fastpris när ni avtalat en
+        summa. Fastprisjobbet visar efteråt vad du i praktiken fick betalt per
+        timme — så du vet vilka jobb som bär sig.</p>
+        <ul>
+          <li><strong>ÄTA hålls utanför priset</strong> — tilläggsarbeten blir egna
+          rader märkta ÄTA, så det avtalade och det tillkomna aldrig blandas ihop.</li>
+          <li><strong>Fakturera per projekt</strong> — eller allt ofakturerat hos
+          kunden på en gång. Resten ligger kvar till nästa faktura.</li>
+        </ul>
+      </div>
+
+      <div class="deep">
+        <h3>Momsen räknar sig själv</h3>
+        <p>Längst ner bland fakturorna står momsunderlaget och räknar medan du
+        jobbar — siffrorna deklarationen frågar efter, per kvartal eller månad,
+        med deadline-påminnelse så att den 12:e aldrig kommer som en överraskning.</p>
+        <ul>
+          <li><strong>Utgifter med kvittofoton</strong> — verktyg, drivmedel och
+          telefon fotas in och räknas med i ingående momsen.</li>
+          <li><strong>Årssammanställning</strong> — intäkter, kostnader och resultat,
+          färdigt som underlag till NE-bilagan.</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="rules-strip">
+  <div class="wrap">
+    <h2>Byggd för svenska regler</h2>
+    <p class="sub">Inte en översatt utländsk tjänst — Timstock är gjord för hur en
+    svensk liten firma faktiskt fakturerar och deklarerar.</p>
+    <div class="chips">
+      <span class="chip hot">ROT-avdrag</span>
+      <span class="chip hot">Omvänd byggmoms</span>
+      <span class="chip hot">Momsbefriad under 120&nbsp;000&nbsp;kr</span>
+      <span class="chip">Momsunderlag per kvartal</span>
+      <span class="chip">Deadline-påminnelse för momsen</span>
+      <span class="chip">NE-årssammanställning</span>
+      <span class="chip">Körjournal</span>
+      <span class="chip">ÄTA</span>
+      <span class="chip">Kvittofoton</span>
+      <span class="chip">Swish &amp; bankgiro</span>
+      <span class="chip">F-skatt på fakturan</span>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap band-inner">
+    <h2>Din data är din. Punkt.</h2>
+    <p>Timstock har ingen server, inget konto och inga spårare. Allt sparas
+    lokalt i din telefon, och appen fungerar även när täckningen försvinner
+    nere i källaren.</p>
+    <ul>
+      <li><strong>Ingen inloggning</strong> — öppna appen och börja registrera.</li>
+      <li><strong>Funkar offline</strong> — tidrapporten bryr sig inte om mottagningen.</li>
+      <li><strong>Säkerhetskopia när du vill</strong> — exportera som fil, eller koppla
+      ditt Google-konto så synkas en kopia till din egen Drive, automatiskt.</li>
+      <li><strong>Mörkt läge</strong> — följer telefonens inställning.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="install" id="installera">
+  <div class="wrap">
+    <h2>Så får du appen på hemskärmen</h2>
+    <div class="steps">
+      <div class="step">
+        <h3>Öppna länken i mobilen</h3>
+        <p>Timstock är en webbapp — ingen butik, ingen nedladdning, inga
+        uppdateringar att vänta på.</p>
+      </div>
+      <div class="step">
+        <h3>Lägg till på hemskärmen</h3>
+        <p>Tryck på dela-knappen i webbläsaren och välj
+        <em>Lägg till på hemskärmen</em>. Funkar på både iPhone och Android.</p>
+      </div>
+      <div class="step">
+        <h3>Klart</h3>
+        <p>Egen ikon, fullskärm och offlineläge — den beter sig som vilken app
+        som helst. Fast utan konto och krångel.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="price">
+  <div class="wrap">
+    <p class="big">Gratis<span>för de första användarna</span></p>
+    <p>Timstock är i tidig fas. Du som börjar nu använder appen gratis och är
+    med och formar vad den ska bli — längre fram kommer den att kosta. Bästa
+    läget att kliva på är alltså nu.</p>
+    <a class="btn btn-primary" href="https://fille382.github.io/timstock/index.html#/">Öppna appen</a>
+  </div>
+</section>
+
+<footer>
+  <div class="rule flip" aria-hidden="true"></div>
+  <div class="wrap foot-row" style="padding-top:24px">
+    <span class="brand">Timstock</span>
+    <p>Timmar, kommentarer och fakturor — ute på fältet.</p>
+    <a class="git" href="https://github.com/fille382/timstock">Öppen källkod på GitHub</a>
+  </div>
+</footer>
+
+</body>
+</html>

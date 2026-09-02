@@ -47,6 +47,45 @@ hemskärmen så beter den sig som en vanlig app.
 > Offlineläget (service worker) kräver `https` eller `localhost` — det aktiveras
 > alltså inte när du öppnar filen direkt med `file://`.
 
+## Demoläge
+
+Öppna appen med `?demo` i adressen (t.ex. `index.html?demo=1`) så startar den
+med låtsasdata — kunder, tidsposter och fakturor att klicka runt i. Ingenting
+sparas: `store.js` rör aldrig localStorage i demoläge, kvittofoton stannar i
+minnet, och Drive-synken är helt bortkopplad så att en demo aldrig kan skriva
+över en riktig säkerhetskopia. En gul remsa under headern visar att demot är
+igång, och en omladdning nollställer allt. Låtsasdatan ligger i `js/demo.js`
+och daterar sig själv utifrån dagens datum.
+
+## Marknadssida
+
+I `marknad/` ligger en fristående reklamsida för appen — `marknad/index.html`
+med appen körande i demoläge direkt på sidan (en iframe mot
+`../index.html?demo=1`), så att besökaren kan testa på riktigt utan att något
+sparas. I `marknad/bilder/` finns skärmdumpar tagna med demodatan — de används
+inte längre på sidan men är färdiga för en eventuell Play Store-listning — samt
+`og.png` som blir förhandsbilden när länken delas via sms och sociala medier.
+
+Repot ligger på GitHub Pages: appen på
+<https://fille382.github.io/timstock/index.html> och reklamsidan på
+<https://fille382.github.io/timstock/marknad/> (när den mergats till `main` —
+Pages bygger från `main`). Sidans **Öppna appen**-knappar och
+`og:image`-metataggen pekar på de adresserna.
+
+### Distribution: hemsida eller Play Store?
+
+Börja med hemsidan. Appen är redan en komplett PWA (manifest + service worker):
+den som öppnar länken kan lägga den på hemskärmen och får ikon, fullskärm och
+offlineläge — utan butik, granskning eller utvecklarkonto. GitHub Pages är
+gratis och en push bort.
+
+Play Store går att lägga till senare utan att röra koden: paketera den hostade
+PWA:n som en Trusted Web Activity med [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap)
+eller [PWABuilder](https://www.pwabuilder.com). Det kräver ett Google
+Play-utvecklarkonto (engångsavgift ~25 USD), en publik https-adress (samma
+hemsida) och en publicerad integritetspolicy. Butiken ger synlighet i sök —
+men appen måste ändå vara hostad, så hemsidan är steg ett i båda fallen.
+
 ## Så räknas timpriset
 
 Priset hämtas i den här ordningen, första träffen gäller:
@@ -404,6 +443,7 @@ bli några MB stor — varje synk laddar upp hela filen.
 | --- | --- |
 | `index.html` | Sidans stomme, flikar och bottenmeny |
 | `css/styles.css` | All formgivning, inklusive utskriftslayout |
+| `js/demo.js` | Låtsasdata för demoläget (`?demo`) — används av marknadssidan |
 | `js/store.js` | Datalager: kunder, projekt, tid, material, körningar, fakturor |
 | `js/ui.js` | Formatering, toast och formulärpanelen |
 | `js/pdf.js` | Bygger fakturans PDF-fil, utan bibliotek |

@@ -20,6 +20,13 @@
 (function (global) {
   'use strict';
 
+  /* I demoläget (?demo, se demo.js) finns Drive inte alls: synkinställningar
+     och token ligger i localStorage och delas med den riktiga appen på samma
+     adress, så en demo som synkar skulle kunna skriva över en riktig
+     säkerhetskopia med låtsasdata. Utan global.Drive döljer Inställningar
+     hela sektionen. */
+  if (global.TimstockDemo && global.TimstockDemo.active) return;
+
   var S = global.Store, U = global.UI;
 
   var CFG_KEY = 'timstock.drive.v1';
