@@ -245,6 +245,24 @@
 
     route(true);
     registerServiceWorker();
+    openInvite();
+  }
+
+  /* Inbjudan till ett delat jobb: index.html?jobb=<fil>&cid=<klient-ID>&key=<nyckel>.
+     Parametrarna tas bort ur adressen direkt, sa att en omladdning eller ett
+     bokmarke inte oppnar inbjudan igen. Demolaget har inga delade jobb. */
+  function openInvite() {
+    var q;
+    try { q = new URLSearchParams(global.location.search); } catch (e) { return; }
+    var fileId = q.get('jobb');
+    if (!fileId) return;
+    try {
+      global.history.replaceState(null, '', global.location.pathname + global.location.hash);
+    } catch (e) { /* file:// kan neka */ }
+    if (S.isDemo() || !Views.clients.openJoin) return;
+    Views.clients.openJoin({
+      fileId: fileId, clientId: q.get('cid') || '', apiKey: q.get('key') || ''
+    });
   }
 
   /* Demoläget markeras med en gul remsa under headern, så att ingen hinner

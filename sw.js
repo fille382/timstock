@@ -1,5 +1,5 @@
 /* sw.js - cachar appens filer sa den fungerar utan tackning ute pa faltet. */
-var CACHE = 'timstock-v25';
+var CACHE = 'timstock-v26';
 
 var ASSETS = [
   './',
@@ -12,6 +12,7 @@ var ASSETS = [
   './js/ui.js',
   './js/pdf.js',
   './js/drive.js',
+  './js/share.js',
   './js/view-time.js',
   './js/view-clients.js',
   './js/view-invoices.js',

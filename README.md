@@ -6,7 +6,8 @@ Mobilanpassad app för att registrera arbetade timmar med en kommentar per
 inlägg, hålla reda på material du lagt ut för och körningar du gjort, och göra
 fakturor av alltihop. Ren HTML/CSS/JS — inget bygge, inget ramverk, ingen
 server. All data ligger lokalt i webbläsaren (`localStorage`), med frivillig
-säkerhetskopiering och synk mellan enheter via Google Drive.
+säkerhetskopiering och synk mellan enheter via Google Drive — och delade jobb
+där en kollega kan registrera tid och material på ditt projekt.
 
 ## Kom igång
 
@@ -390,6 +391,8 @@ gratis i Google Cloud Console och tar några minuter:
 1. Gå till <https://console.cloud.google.com>, logga in och skapa ett nytt
    projekt (namnet spelar ingen roll, t.ex. *Timstock*).
 2. **APIs & Services → Library**: sök upp och aktivera **Google Drive API**.
+   Ska du dela jobb med kollegor (se *Delade jobb* nedan): aktivera även
+   **Google Picker API**.
 3. **APIs & Services → OAuth consent screen**: välj typen **External** och
    fyll i appnamn och din e-post. Tryck sedan **Publish app** — appen behöver
    ingen granskning av Google, eftersom den bara begär icke-känsliga
@@ -402,10 +405,17 @@ gratis i Google Cloud Console och tar några minuter:
    `http://localhost:8080` för lokal testning. Ingen redirect-URI behövs.
 5. Kopiera klient-ID:t (slutar på `.apps.googleusercontent.com`) och klistra
    in det under **Inställningar → Google Drive** i appen.
+6. *Bara för delade jobb:* **Credentials → Create credentials → API key**.
+   Begränsa nyckeln under **Application restrictions → Websites** till
+   appens adress (t.ex. `https://dittnamn.github.io/*`) och under **API
+   restrictions** till **Google Picker API**. Klistra in den i fältet
+   **API-nyckel** under Inställningar → Google Drive. Nyckeln är ingen
+   hemlighet — den fungerar bara från din adress — och följer med i
+   inbjudningslänkarna.
 
 Samma klient-ID används på alla dina enheter. Vill du slippa klistra in det
-på varje enhet kan du skriva in det i `DEFAULT_CLIENT_ID` överst i
-`js/drive.js` innan du lägger upp appen.
+på varje enhet kan du skriva in det i `DEFAULT_CLIENT_ID` (och nyckeln i
+`DEFAULT_API_KEY`) överst i `js/drive.js` innan du lägger upp appen.
 
 > Precis som offlineläget kräver Google-inloggningen `https` eller
 > `localhost` — den fungerar inte när sidan öppnas direkt via `file://`.
@@ -437,6 +447,95 @@ på varje enhet kan du skriva in det i `DEFAULT_CLIENT_ID` överst i
 Filen växer med antalet kvittofoton (de ligger med som base64), så den kan
 bli några MB stor — varje synk laddar upp hela filen.
 
+## Delade jobb — bjud in en kollega
+
+Låt en kollega, anställd eller underentreprenör registrera tid, material och
+körningar på ett av dina projekt från sin egen telefon. Posterna hamnar hos
+dig som vanliga poster på projektet och faktureras av dig som vanligt.
+Fortfarande ingen server: jobbet blir en egen fil i din Google Drive som delas
+med kollegans Gmail-adress.
+
+Förutsättningar: Google Drive är kopplat under Inställningar, och Google
+Picker API plus en API-nyckel är på plats (steg 2 och 6 ovan). Står
+OAuth-appen kvar i testläge måste kollegan läggas till under **Test users** —
+enklast är att publicera den.
+
+### Så bjuder du in
+
+1. Öppna projektet under **Kunder** och skrolla till **Dela jobbet**.
+2. Skriv kollegans Gmail-adress och tryck **Bjud in**. Google mejlar en
+   inbjudan med länken. Vill du hellre sms:a den: **Skicka
+   inbjudningslänken**.
+3. Kollegan öppnar länken, skriver sitt namn och trycker **Logga in och gå
+   med**: loggar in med Google och markerar sedan jobbfilen i Googles
+   filväljare. Det steget är Googles sätt att ge appen tillgång till en fil
+   någon annan delat — appen ser fortfarande bara den filen och sina egna,
+   inget annat i kollegans Drive. Länken bär med sig ditt klient-ID och din
+   API-nyckel, så kollegan behöver aldrig röra Google Cloud.
+
+Öppnas länken i webbläsaren men kollegan har appen på hemskärmen (på iPhone
+har den då egen lagring) går det att klistra in länken i appen i stället:
+**Kunder → Fått en inbjudan till ett jobb? Klistra in länken**.
+
+### Hos kollegan
+
+Jobbet syns under **Kunder → Jobb delade med dig** och går att välja som kund
+och projekt i tidrapporten. Formulären anpassar sig:
+
+- **Tid** registreras som vanligt.
+- **Material**: bara vad som köptes, antal och vad kollegan betalade per enhet
+  (exkl. moms), plus moms och kvittofoto. Priset mot kunden sätter du.
+- **Körning**: antal mil och körjournal. Milersättningen är din.
+- **ÄTA**-rutan finns om jobbet har fast pris, så att tilläggsarbeten kan
+  märkas på plats. Själva priset ser kollegan aldrig — filen innehåller inga
+  priser alls, bara jobbets namn, kundens namn och om det är fastpris.
+
+Posterna på ett delat jobb är aldrig kollegans att fakturera: de hålls utanför
+kollegans fakturor, ofakturerat-summor, momsunderlag och årssammanställning.
+I listan står det *Delat jobb · faktureras av …* i stället för ett belopp.
+
+Ändringar skickas automatiskt några sekunder efter att de sparats, så länge
+Google-inloggningen lever (se ovan om att logga in igen). Under
+**Kunder → jobbet** finns **Synka nu**, status och **Lämna jobbet** — det tar
+bort jobbet och kollegans kopior; det som redan synkats ligger kvar hos dig.
+Byter kollegan telefon hämtas de egna posterna tillbaka från jobbfilen när
+länken öppnas igen.
+
+### Hos dig
+
+Kollegornas poster hämtas när appen öppnas och var femte minut medan den är
+öppen — så länge Google-inloggningen lever — och när som helst med **Hämta
+kollegornas poster nu**. De märks med kollegans namn i
+tidrapporten, i projektets utfallsruta (*varav Kalle 12 h*) och i
+CSV-exportens kolumn *Registrerad av*.
+
+- **Tid** faktureras med projektets timpris, som dina egna timmar.
+- **Material** får á-pris = kollegans inköpspris plus ditt standardpåslag.
+  Kvittofotot följer med.
+- **Körningar** får din milersättning och ingen framkörningsavgift — lägg till
+  en om den ska debiteras.
+
+Du kan ändra posterna. Ändrar kollegan samma post senare skrivs kollegans
+fält (datum, timmar, kommentar, antal, inköpspris, sträcka …) över, medan ditt
+á-pris, din milersättning och ett flyttat projekt ligger kvar. Tar du bort en
+post hämtas den inte in igen. En **fakturerad** post är låst: kollegans senare
+ändringar eller borttagningar når den inte.
+
+**Ta bort** bredvid en kollega tar bort dennes åtkomst. **Sluta dela** hämtar
+det sista, lägger jobbfilen i papperskorgen i Drive och stänger jobbet för
+alla — de poster du redan hämtat ligger kvar. Ett delat projekt kan inte tas
+bort förrän det slutat delas.
+
+### Bra att veta
+
+- Jobbfilen är en brevlåda: var och en skriver bara sina egna poster. Drive
+  saknar låsning, så skriver två exakt samtidigt kan den ena skrivningen
+  försvinna — men varje telefon har sina poster kvar och lägger tillbaka dem
+  vid nästa synk. Filen läker sig själv.
+- Kvittofoton ligger i jobbfilen som base64, så den växer med antalet kvitton.
+- Kollegan behöver inget eget klient-ID. Har kollegan redan ett eget (för sin
+  egen säkerhetskopia) gäller det, och då behövs även en egen API-nyckel.
+
 ## Filer
 
 | Fil | Innehåll |
@@ -448,6 +547,7 @@ bli några MB stor — varje synk laddar upp hela filen.
 | `js/ui.js` | Formatering, toast och formulärpanelen |
 | `js/pdf.js` | Bygger fakturans PDF-fil, utan bibliotek |
 | `js/drive.js` | Gmail-inloggning och synk av säkerhetskopian till Google Drive |
+| `js/share.js` | Delade jobb: inbjudningar, Googles filväljare och synk av kollegornas poster |
 | `js/view-time.js` | Tidrapporten — tid, material och körningar |
 | `js/view-clients.js` | Kunder och projekt |
 | `js/view-invoices.js` | Fakturor, fakturamall och utskrift |

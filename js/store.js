@@ -26,7 +26,8 @@
         nextInvoiceNumber: 1,
         rotPercent: 30,
         rotMaxPerYear: 50000,
-        vatPeriod: 'kvartal' // 'manad' | 'kvartal' | 'helar'
+        vatPeriod: 'kvartal', // 'manad' | 'kvartal' | 'helar'
+        shareName: ''         // namnet du syns med i jobb andra delat med dig
       },
       clients: [],
       projects: [],
@@ -269,6 +270,7 @@
         if (filter.projectId && e.projectId !== filter.projectId) return false;
         if (filter.from && e.date < filter.from) return false;
         if (filter.to && e.date > filter.to) return false;
+        if (filter.status && isMemberItem(e)) return false;
         if (filter.status === 'unbilled' && e.invoiceId) return false;
         if (filter.status === 'billed' && !e.invoiceId) return false;
         if (filter.invoiceId && e.invoiceId !== filter.invoiceId) return false;
@@ -289,6 +291,7 @@
   }
 
   function saveEntry(e) {
+    e.updatedAt = new Date().toISOString();
     if (e.id) {
       var i = data.entries.findIndex(function (x) { return x.id === e.id; });
       if (i >= 0) data.entries[i] = Object.assign({}, data.entries[i], e);
@@ -305,6 +308,7 @@
   function deleteEntry(id) {
     var e = entry(id);
     if (e && e.invoiceId) return false; // fakturerad tid far inte forsvinna tyst
+    if (e) noteSharedDelete(e);
     data.entries = data.entries.filter(function (x) { return x.id !== id; });
     save();
     return true;
@@ -322,6 +326,7 @@
         if (filter.projectId && m.projectId !== filter.projectId) return false;
         if (filter.from && m.date < filter.from) return false;
         if (filter.to && m.date > filter.to) return false;
+        if (filter.status && isMemberItem(m)) return false;
         if (filter.status === 'unbilled' && m.invoiceId) return false;
         if (filter.status === 'billed' && !m.invoiceId) return false;
         if (filter.invoiceId && m.invoiceId !== filter.invoiceId) return false;
@@ -342,6 +347,7 @@
   }
 
   function saveMaterial(m) {
+    m.updatedAt = new Date().toISOString();
     if (m.id) {
       var i = data.materials.findIndex(function (x) { return x.id === m.id; });
       if (i >= 0) data.materials[i] = Object.assign({}, data.materials[i], m);
@@ -358,6 +364,7 @@
   function deleteMaterial(id) {
     var m = material(id);
     if (m && m.invoiceId) return false; // fakturerat material far inte forsvinna tyst
+    if (m) noteSharedDelete(m);
     if (m && m.photoId) deletePhoto(m.photoId).catch(function () {});
     data.materials = data.materials.filter(function (x) { return x.id !== id; });
     save();
@@ -380,6 +387,7 @@
         if (filter.projectId && t.projectId !== filter.projectId) return false;
         if (filter.from && t.date < filter.from) return false;
         if (filter.to && t.date > filter.to) return false;
+        if (filter.status && isMemberItem(t)) return false;
         if (filter.status === 'unbilled' && t.invoiceId) return false;
         if (filter.status === 'billed' && !t.invoiceId) return false;
         if (filter.invoiceId && t.invoiceId !== filter.invoiceId) return false;
@@ -396,6 +404,7 @@
   }
 
   function saveTrip(t) {
+    t.updatedAt = new Date().toISOString();
     if (t.id) {
       var i = data.trips.findIndex(function (x) { return x.id === t.id; });
       if (i >= 0) data.trips[i] = Object.assign({}, data.trips[i], t);
@@ -412,6 +421,7 @@
   function deleteTrip(id) {
     var t = trip(id);
     if (t && t.invoiceId) return false; // fakturerad korning far inte forsvinna tyst
+    if (t) noteSharedDelete(t);
     data.trips = data.trips.filter(function (x) { return x.id !== id; });
     save();
     return true;
@@ -436,22 +446,35 @@
      det avtalade priset och faktureras darfor alltid, aven pa ett fastprisjobb.
      Markningen betyder inget pa lopande rakning. */
   function isAta(obj) {
-    return !!(obj && obj.ata) && isFixed(obj.projectId);
+    return !!(obj && obj.ata) && ataApplies(obj.projectId);
+  }
+
+  /* Har ATA-markeringen nagon mening pa projektet? Pa ett jobb nagon annan
+     delat med dig vet du bara att det ar fastpris - inte priset. */
+  function ataApplies(projectId) {
+    if (isFixed(projectId)) return true;
+    var mj = memberJob(projectId);
+    return !!(mj && mj.fixed);
   }
 
   function entryAmount(e) {
     return round2(Number(e.hours || 0) * rateFor(e.clientId, e.projectId));
   }
 
+  /* Poster pa ett jobb nagon annan delat med dig faktureras av den andra -
+     for dig ar de aldrig nagot att fakturera. */
   function billableEntry(e) {
+    if (isMemberItem(e)) return 0;
     return (isFixed(e.projectId) && !e.ata) ? 0 : entryAmount(e);
   }
 
   function billableMaterial(m) {
+    if (isMemberItem(m)) return 0;
     return (fixedCoversExtras(m.projectId) && !m.ata) ? 0 : materialAmount(m);
   }
 
   function billableTrip(t) {
+    if (isMemberItem(t)) return 0;
     return (fixedCoversExtras(t.projectId) && !t.ata) ? 0 : tripAmount(t);
   }
 
@@ -771,7 +794,7 @@
     });
 
     data.materials.forEach(function (m) {
-      if (!inRange(m.date)) return;
+      if (!inRange(m.date) || isMemberItem(m)) return;
       var v = materialPurchaseVat(m);
       if (!v) return;
       out.vatInMaterials += v;
@@ -817,7 +840,7 @@
     });
 
     data.materials.forEach(function (m) {
-      if (!inYear(m.date)) return;
+      if (!inYear(m.date) || isMemberItem(m)) return;
       var c = Number(m.cost);
       if (!isFinite(c) || c <= 0) return;
       out.materialCost += Number(m.qty || 0) * c;
@@ -832,7 +855,7 @@
     });
 
     data.trips.forEach(function (t) {
-      if (!inYear(t.date)) return;
+      if (!inYear(t.date) || isMemberItem(t)) return;
       out.distance += Number(t.distance || 0);
       out.tripCount++;
     });
@@ -925,6 +948,117 @@
       if (p.invoiceId === id) p.invoiceId = null;
     });
     data.invoices = data.invoices.filter(function (i) { return i.id !== id; });
+    save();
+  }
+
+  /* ---------- Delade jobb ----------
+
+     Ett projekt kan delas med kollegor via Google Drive (se share.js). Tva
+     roller, tva markeringar:
+
+       p.share     Ditt jobb som du delat ut. { fileId, members, dismissed }
+                   Kollegornas poster hamtas in som vanliga poster med
+                   o.shared = { fileId, author, authorName, ... } och
+                   faktureras av dig som vanligt.
+       p.memberOf  Ett jobb nagon annan delat med dig. { fileId, owner,
+                   ownerName, fixed, deleted }. Dina poster pa det skickas
+                   till agaren och ar aldrig dina att fakturera - de halls
+                   utanfor fakturor, momsunderlag och arssammanstallning.
+                   Projektet ligger under en egen kund med c.memberOf. */
+
+  function memberJob(projectId) {
+    var p = projectId ? project(projectId) : null;
+    return p && p.memberOf ? p.memberOf : null;
+  }
+
+  function isMemberItem(o) {
+    return !!(o && memberJob(o.projectId));
+  }
+
+  function memberProjects() {
+    return data.projects.filter(function (p) { return !!p.memberOf; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name, 'sv'); });
+  }
+
+  function sharedProjects() {
+    return data.projects.filter(function (p) { return !!(p.share && p.share.fileId); });
+  }
+
+  /* Ta bort en delad post ska synas hos den andra parten: som medlem lamnar
+     du en gravsten som skickas till agaren, som agare kommer du ihag att
+     posten inte ska hamtas in igen. */
+  function noteSharedDelete(o) {
+    var p = project(o.projectId);
+    if (p && p.memberOf) {
+      p.memberOf.deleted = (p.memberOf.deleted || []).concat(o.id);
+      return;
+    }
+    if (o.shared && o.shared.fileId) {
+      var owner = data.projects.find(function (x) {
+        return x.share && x.share.fileId === o.shared.fileId;
+      });
+      if (owner) owner.share.dismissed = (owner.share.dismissed || []).concat(o.id);
+    }
+  }
+
+  var KIND_LIST = { time: 'entries', material: 'materials', trip: 'trips' };
+
+  function sharedItem(kind, id) {
+    var list = data[KIND_LIST[kind]];
+    return list ? list.find(function (o) { return o.id === id; }) || null : null;
+  }
+
+  /* Lagger in, uppdaterar och tar bort poster fran ett delat jobb i en enda
+     sparning. ops: [{ kind, op: 'put'|'remove', obj | id }] */
+  function applyShared(ops) {
+    var changed = false;
+    ops.forEach(function (o) {
+      var key = KIND_LIST[o.kind];
+      if (!key) return;
+      if (o.op === 'remove') {
+        var gone = sharedItem(o.kind, o.id);
+        if (!gone || gone.invoiceId) return;
+        if (gone.photoId) deletePhoto(gone.photoId).catch(function () {});
+        data[key] = data[key].filter(function (x) { return x.id !== o.id; });
+        changed = true;
+        return;
+      }
+      var i = data[key].findIndex(function (x) { return x.id === o.obj.id; });
+      if (i >= 0) data[key][i] = Object.assign({}, data[key][i], o.obj);
+      else data[key].push(o.obj);
+      changed = true;
+    });
+    if (changed) save();
+    return changed;
+  }
+
+  /* Uppdaterar ett projekts delningsuppgifter utan att rora resten. */
+  function setProjectShare(projectId, field, value) {
+    var p = project(projectId);
+    if (!p) return;
+    if (value) p[field] = value; else delete p[field];
+    save();
+  }
+
+  /* Lamna ett jobb nagon delat med dig: dina poster finns kvar hos agaren,
+     har tas jobbet och dina kopior bort. Kunden tas bort nar den inte har
+     nagot annat delat jobb kvar. */
+  function removeMemberJob(projectId) {
+    var p = project(projectId);
+    if (!p || !p.memberOf) return;
+    var keep = function (o) {
+      if (o.projectId !== projectId) return true;
+      if (o.photoId) deletePhoto(o.photoId).catch(function () {});
+      return false;
+    };
+    data.entries = data.entries.filter(keep);
+    data.materials = data.materials.filter(keep);
+    data.trips = data.trips.filter(keep);
+    data.projects = data.projects.filter(function (x) { return x.id !== projectId; });
+    var c = client(p.clientId);
+    if (c && c.memberOf && !data.projects.some(function (x) { return x.clientId === c.id; })) {
+      data.clients = data.clients.filter(function (x) { return x.id !== c.id; });
+    }
     save();
   }
 
@@ -1025,6 +1159,10 @@
     setInvoiceStatus: setInvoiceStatus, setInvoiceRotClaimed: setInvoiceRotClaimed,
     deleteInvoice: deleteInvoice,
     company: company, settings: settings, saveCompany: saveCompany, saveSettings: saveSettings,
-    exportJSON: exportJSON, importJSON: importJSON, resetAll: resetAll
+    exportJSON: exportJSON, importJSON: importJSON, resetAll: resetAll,
+    memberJob: memberJob, isMemberItem: isMemberItem, ataApplies: ataApplies,
+    memberProjects: memberProjects, sharedProjects: sharedProjects,
+    sharedItem: sharedItem, applyShared: applyShared, setProjectShare: setProjectShare,
+    removeMemberJob: removeMemberJob
   };
 })(window);
