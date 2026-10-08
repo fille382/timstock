@@ -182,7 +182,13 @@
         + '<p class="small muted" style="margin:-6px 0 12px">Skapas gratis i Google Cloud Console — '
         + 'steg för steg i README-filen, avsnittet <b>Google Drive</b>. Använd samma klient-ID på '
         + 'alla dina enheter.</p>'
-        + '<button class="btn btn-primary btn-block" data-drive-save-client>Spara klient-ID</button>';
+        + '<div class="field"><label for="drv-apikey">API-nyckel (för delade jobb)</label>'
+        + '<input type="text" id="drv-apikey" autocapitalize="off" spellcheck="false" '
+        + 'placeholder="AIza…" value="' + U.esc(st.apiKey) + '"></div>'
+        + '<p class="small muted" style="margin:-6px 0 12px">Behövs bara om du vill bjuda in '
+        + 'kollegor till ett jobb — då använder de Googles filväljare för att öppna det. Se '
+        + 'README, avsnittet <b>Delade jobb</b>.</p>'
+        + '<button class="btn btn-primary btn-block" data-drive-save-client>Spara</button>';
       if (st.configured) {
         html += '<button class="btn btn-block" data-drive-cancel-client style="margin-top:10px">Avbryt</button>';
       }
@@ -211,11 +217,13 @@
     if (st.connected) {
       html += '<button class="btn btn-block" data-drive-push style="margin-top:12px">Spara till Drive nu</button>'
         + '<button class="btn btn-block" data-drive-pull style="margin-top:10px">Hämta från Drive</button>'
+        + '<button class="btn btn-block" data-drive-edit-client style="margin-top:10px">'
+        + (st.apiKey ? 'Klient-ID och API-nyckel' : 'Lägg till API-nyckel för delade jobb') + '</button>'
         + '<button class="btn btn-block" data-drive-disconnect style="margin-top:10px">Koppla bort kontot</button>';
     } else {
       html += '<button class="btn btn-primary btn-block" data-drive-connect style="margin-top:12px">'
         + (st.email ? 'Logga in igen' : 'Anslut Google-konto') + '</button>'
-        + '<button class="btn btn-block" data-drive-edit-client style="margin-top:10px">Ändra klient-ID</button>';
+        + '<button class="btn btn-block" data-drive-edit-client style="margin-top:10px">Ändra klient-ID / API-nyckel</button>';
       if (st.email) {
         html += '<button class="btn btn-block" data-drive-disconnect style="margin-top:10px">Koppla bort kontot</button>';
       }
@@ -235,8 +243,9 @@
     if (!container || container.hidden || !document.contains(container)) return;
     var host = container.querySelector('#drive-card');
     if (!host) return;
-    /* Skriv inte over faltet mitt i en inklistring av klient-ID:t. */
-    if (!force && document.activeElement && document.activeElement.id === 'drv-client') return;
+    /* Skriv inte over falten mitt i en inklistring av klient-ID:t. */
+    var active = document.activeElement && document.activeElement.id;
+    if (!force && (active === 'drv-client' || active === 'drv-apikey')) return;
     host.outerHTML = driveCard();
   }
 
@@ -250,7 +259,8 @@
      stämmer på varje enskild rad. */
   function csv() {
     var rows = [['Datum', 'Typ', 'ÄTA', 'Kund', 'Projekt', 'Antal', 'Enhet', 'Á-pris',
-      'Belopp', 'Beskrivning', 'Från', 'Till', 'Inköpspris', 'Ingående moms', 'Faktura']];
+      'Belopp', 'Beskrivning', 'Från', 'Till', 'Inköpspris', 'Ingående moms', 'Faktura',
+      'Registrerad av']];
 
     function row(o, typ, qty, unit, rate, amount, text, from, to, cost, inVat) {
       var c = S.client(o.clientId);
@@ -259,7 +269,9 @@
       rows.push([
         o.date, typ, S.isAta(o) ? 'Ja' : '', c ? c.name : '', p ? p.name : '',
         dec(qty), unit, dec(rate), dec(U.round2(amount)),
-        text || '', from || '', to || '', dec(cost), dec(inVat), inv ? inv.number : ''
+        text || '', from || '', to || '', dec(cost), dec(inVat), inv ? inv.number : '',
+        /* Kollegor i delade jobb - tomt for det du registrerat sjalv. */
+        o.shared && o.shared.author ? (o.shared.authorName || o.shared.author) : ''
       ]);
     }
 
@@ -371,8 +383,8 @@
         var cid = val(el, '#drv-client');
         if (!cid) { U.toast('Klistra in klient-ID:t först', true); return; }
         editClient = false;
-        global.Drive.setClientId(cid);
-        U.toast('Klient-ID sparat');
+        global.Drive.setClientId(cid, val(el, '#drv-apikey'));
+        U.toast('Sparat');
         refreshDriveCard(true);
         return;
       }

@@ -282,6 +282,41 @@
     return '<span class="badge badge-muted">Faktura ' + U.esc(inv ? inv.number : '?') + '</span>';
   }
 
+  /* ---------- Delade jobb ---------- */
+
+  /* Pa ett jobb nagon annan delat med dig: vem som fakturerar i stallet
+     for belopp och fakturastatus. */
+  function memberSub(obj) {
+    var mj = S.memberJob(obj.projectId);
+    return '<span class="badge badge-shared">Delat jobb</span>'
+      + '<span>faktureras av ' + U.esc(mj.ownerName || mj.owner) + '</span>';
+  }
+
+  function authorName(sh) {
+    return sh.authorName || String(sh.author || '').split('@')[0];
+  }
+
+  /* Hos agaren: vem som registrerade posten. */
+  function authorBadge(obj) {
+    if (!obj.shared || !obj.shared.author) return '';
+    return '<span class="badge badge-shared">' + U.esc(authorName(obj.shared)) + '</span>';
+  }
+
+  /* Overst i formularet for en post en kollega registrerat. */
+  function sharedNotice(obj, fields) {
+    if (!obj || !obj.shared || !obj.shared.author) return '';
+    return '<div class="notice notice-info" style="margin:0 0 14px">Registrerad av <b>'
+      + U.esc(authorName(obj.shared)) + '</b> (' + U.esc(obj.shared.author) + ') i det delade '
+      + 'jobbet. Ändrar kollegan posten skrivs ' + fields + ' över här.</div>';
+  }
+
+  /* Text i forhandsvisningen nar ett delat jobb ar valt. */
+  function memberPreview(pid) {
+    var mj = S.memberJob(pid);
+    return '<div class="totals-row"><span class="muted">Delat jobb</span><span>skickas till '
+      + U.esc(mj.ownerName || mj.owner) + '</span></div>';
+  }
+
   function entryHTML(e) {
     return '<button class="item" data-edit="' + U.esc(e.id) + '" type="button">'
       + '<div class="item-top">'
@@ -289,13 +324,15 @@
       + '<span class="item-amount">' + U.hours(e.hours) + '</span>'
       + '</div>'
       + '<div class="item-sub">'
-      + (S.isFixed(e.projectId) && !e.ata
-        ? '<span class="badge badge-fixed">Ingår i fastpris</span>'
-        : '<span>' + U.money(amountOf(e)) + '</span>'
-          + '<span class="dot">•</span>'
-          + '<span>' + U.money0(S.rateFor(e.clientId, e.projectId)) + '/h</span>')
-      + ataBadge(e)
-      + billedBadge(e)
+      + (S.isMemberItem(e) ? memberSub(e) + ataBadge(e)
+        : (S.isFixed(e.projectId) && !e.ata
+          ? '<span class="badge badge-fixed">Ingår i fastpris</span>'
+          : '<span>' + U.money(amountOf(e)) + '</span>'
+            + '<span class="dot">•</span>'
+            + '<span>' + U.money0(S.rateFor(e.clientId, e.projectId)) + '/h</span>')
+          + ataBadge(e)
+          + authorBadge(e)
+          + billedBadge(e))
       + '</div>'
       + (e.comment ? '<div class="item-comment">' + U.esc(e.comment) + '</div>' : '')
       + '</button>';
@@ -309,14 +346,17 @@
       + '<span class="item-amount">' + U.esc(qty) + '</span>'
       + '</div>'
       + '<div class="item-sub">'
-      + (S.fixedCoversExtras(m.projectId) && !m.ata
-        ? '<span class="badge badge-fixed">Ingår i fastpris</span>'
-        : '<span>' + U.money(S.materialAmount(m)) + '</span>'
-          + '<span class="dot">•</span>'
-          + '<span>' + U.money(m.unitPrice) + '/' + U.esc(m.unit || 'st') + '</span>')
-      + '<span class="badge badge-material">Material</span>'
-      + ataBadge(m)
-      + billedBadge(m)
+      + (S.isMemberItem(m)
+        ? memberSub(m) + '<span class="badge badge-material">Material</span>' + ataBadge(m)
+        : (S.fixedCoversExtras(m.projectId) && !m.ata
+          ? '<span class="badge badge-fixed">Ingår i fastpris</span>'
+          : '<span>' + U.money(S.materialAmount(m)) + '</span>'
+            + '<span class="dot">•</span>'
+            + '<span>' + U.money(m.unitPrice) + '/' + U.esc(m.unit || 'st') + '</span>')
+          + '<span class="badge badge-material">Material</span>'
+          + ataBadge(m)
+          + authorBadge(m)
+          + billedBadge(m))
       + '</div>'
       + '<div class="item-comment">' + U.esc(m.description) + '</div>'
       + '</button>';
@@ -330,7 +370,10 @@
 
   function tripHTML(t) {
     var parts = [];
-    if (S.fixedCoversExtras(t.projectId) && !t.ata) {
+    var member = S.isMemberItem(t);
+    if (member) {
+      parts.push(memberSub(t));
+    } else if (S.fixedCoversExtras(t.projectId) && !t.ata) {
       parts.push('<span class="badge badge-fixed">Ingår i fastpris</span>');
     } else {
       if (t.distance) {
@@ -346,13 +389,14 @@
     return '<button class="item" data-edit-trip="' + U.esc(t.id) + '" type="button">'
       + '<div class="item-top">'
       + '<span class="item-title">' + U.esc(label(t.clientId, t.projectId)) + '</span>'
-      + '<span class="item-amount">' + U.money(S.tripAmount(t)) + '</span>'
+      + '<span class="item-amount">'
+      + (member ? U.distance(t.distance) : U.money(S.tripAmount(t))) + '</span>'
       + '</div>'
       + '<div class="item-sub">'
       + parts.join('<span class="dot">•</span>')
       + '<span class="badge badge-trip">Körning</span>'
       + ataBadge(t)
-      + billedBadge(t)
+      + (member ? '' : authorBadge(t) + billedBadge(t))
       + '</div>'
       + (text ? '<div class="item-comment">' + U.esc(text) + '</div>' : '')
       + '</button>';
@@ -385,6 +429,15 @@
     return p && p.clientId === clientId ? p.id : '';
   }
 
+  /* Under en kund som bara finns for ett delat jobb maste jobbet valjas -
+     en post utan projekt dar vore ingens. */
+  function projectOptions(clientId, selectedId) {
+    var c = S.client(clientId);
+    var projs = S.projects(clientId);
+    if (c && c.memberOf) return U.options(projs, selectedId || (projs[0] ? projs[0].id : ''));
+    return U.options(projs, selectedId || '', 'Inget projekt');
+  }
+
   function clientFields(clientId, selectedProjectId, disabled) {
     var projs = S.projects(clientId);
     return '<div class="field"><label for="f-client">Kund</label>'
@@ -392,7 +445,7 @@
       + '<div class="field" id="f-project-wrap"' + (projs.length ? '' : ' hidden') + '>'
       + '<label for="f-project">Projekt</label>'
       + '<select id="f-project"' + disabled + '>'
-      + U.options(projs, selectedProjectId || '', 'Inget projekt') + '</select></div>';
+      + projectOptions(clientId, selectedProjectId) + '</select></div>';
   }
 
   /* ÄTA-rutan har bara mening på ett fastprisjobb. Den ritas alltid men döljs
@@ -409,7 +462,7 @@
   function toggleAtaField(body) {
     var wrap = body.querySelector('#f-ata-wrap');
     if (!wrap) return;
-    var show = S.isFixed(selectedProjectId(body));
+    var show = S.ataApplies(selectedProjectId(body));
     wrap.hidden = !show;
     if (!show) body.querySelector('#f-ata').checked = false;
   }
@@ -430,7 +483,7 @@
   function wireClientChange(body, onChange) {
     body.querySelector('#f-client').addEventListener('change', function () {
       var ps = S.projects(this.value);
-      body.querySelector('#f-project').innerHTML = U.options(ps, '', 'Inget projekt');
+      body.querySelector('#f-project').innerHTML = projectOptions(this.value, '');
       body.querySelector('#f-project-wrap').hidden = !ps.length;
       onChange();
     });
@@ -455,6 +508,7 @@
     var html = '';
 
     if (billed) html += lockedNotice(e);
+    html += sharedNotice(e, 'datum, timmar och kommentar');
 
     html += '<div class="field"><label for="f-date">Datum</label>'
       + '<input type="date" id="f-date" value="' + U.esc(e ? e.date : S.todayISO()) + '"' + dis + '></div>';
@@ -490,6 +544,10 @@
         toggleAtaField(body);
         var h = U.parseHours(hoursInput.value);
         var pid = selectedProjectId(body);
+        if (S.memberJob(pid)) {
+          body.querySelector('#f-preview').innerHTML = memberPreview(pid);
+          return;
+        }
         var rate = S.rateFor(body.querySelector('#f-client').value, pid);
         var amount = isFinite(h) ? h * rate : 0;
         var covered = S.isFixed(pid) && !ataChecked(body);
@@ -582,6 +640,7 @@
     var html = '';
 
     if (billed) html += lockedNotice(m);
+    html += sharedNotice(m, 'datum, antal, inköpspris och kvitto');
 
     html += '<div class="field"><label for="f-date">Datum</label>'
       + '<input type="date" id="f-date" value="' + U.esc(m ? m.date : S.todayISO()) + '"' + dis + '></div>';
@@ -604,18 +663,18 @@
       + '</datalist></div>'
       + '</div>';
 
-    html += '<div class="field"><label for="m-price">Á-pris till kund (kr)</label>'
+    html += '<div class="field" id="m-price-wrap"><label for="m-price">Á-pris till kund (kr)</label>'
       + '<input type="text" id="m-price" inputmode="decimal" autocomplete="off" placeholder="0"'
       + ' value="' + U.esc(m && m.unitPrice !== '' ? String(m.unitPrice).replace('.', ',') : '') + '"' + dis + '></div>';
 
     if (!billed) {
-      html += '<details class="calc"' + (m && m.cost ? ' open' : '') + '>'
+      html += '<details class="calc" id="m-calc"' + (m && m.cost ? ' open' : '') + '>'
         + '<summary>Räkna fram á-priset från inköpspris</summary>'
         + '<div class="row" style="margin-top:12px">'
-        + '<div class="field"><label for="m-cost">Inköpspris/enhet</label>'
+        + '<div class="field"><label for="m-cost" id="m-cost-label">Inköpspris/enhet</label>'
         + '<input type="text" id="m-cost" inputmode="decimal" autocomplete="off" placeholder="0"'
         + ' value="' + U.esc(m && m.cost ? String(m.cost).replace('.', ',') : '') + '"></div>'
-        + '<div class="field"><label for="m-markup">Påslag (%)</label>'
+        + '<div class="field" id="m-markup-wrap"><label for="m-markup">Påslag (%)</label>'
         + '<input type="text" id="m-markup" inputmode="decimal" autocomplete="off" placeholder="0"'
         + ' value="' + U.esc(markup || '') + '"></div>'
         + '</div>'
@@ -625,7 +684,7 @@
             + '<input type="text" id="m-pvat" inputmode="decimal" autocomplete="off"'
             + ' value="' + U.esc(m && m.purchaseVat !== '' && m.purchaseVat !== undefined
               && m.purchaseVat !== null ? String(m.purchaseVat).replace('.', ',') : '') + '"></div>')
-        + '<p class="small muted" style="margin:-4px 0 4px">Fyll i båda så räknas á-priset ut åt dig. '
+        + '<p class="small muted" id="m-calc-help" style="margin:-4px 0 4px">Fyll i båda så räknas á-priset ut åt dig. '
         + 'Inköpspriset syns aldrig på fakturan.'
         + (S.vatExempt() ? ''
           : ' Momsen hamnar i momsunderlaget som ingående moms — lämnas fältet tomt räknas '
@@ -659,8 +718,32 @@
       /* Kontrollern behovs i submitMaterial, som bara far body. */
       body.__photo = U.initPhotoField(body, m ? m.photoId : '');
 
+      /* Pa ett delat jobb satter agaren priset mot kunden - kollegan fyller
+         bara i vad hen betalade. Helpers for att vaxla formularet. */
+      var calcEl = body.querySelector('#m-calc');
+      var calcHelpHTML = calcEl ? body.querySelector('#m-calc-help').innerHTML : '';
+
+      function memberMode(pid) {
+        var member = !!S.memberJob(pid);
+        body.querySelector('#m-price-wrap').hidden = member;
+        if (!calcEl) return member;
+        if (member) calcEl.open = true;
+        calcEl.querySelector('summary').hidden = member;
+        body.querySelector('#m-markup-wrap').hidden = member;
+        body.querySelector('#m-cost-label').textContent = member
+          ? 'Vad du betalade per enhet (exkl. moms) *' : 'Inköpspris/enhet';
+        body.querySelector('#m-calc-help').innerHTML = member
+          ? 'Ägaren av jobbet sätter priset mot kunden. Fota kvittot nedan så får ägaren det också.'
+          : calcHelpHTML;
+        return member;
+      }
+
       function updatePreview() {
         toggleAtaField(body);
+        if (memberMode(selectedProjectId(body))) {
+          body.querySelector('#m-preview').innerHTML = memberPreview(selectedProjectId(body));
+          return;
+        }
         var qty = U.parseHours(qtyEl.value);
         var price = U.parseHours(priceEl.value);
         var amount = (isFinite(qty) ? qty : 0) * (isFinite(price) ? price : 0);
@@ -748,14 +831,22 @@
     var costEl = body.querySelector('#m-cost');
     var markupEl = body.querySelector('#m-markup');
 
+    var cost = costEl ? U.parseHours(costEl.value) : NaN;
+    var markup = markupEl ? U.parseHours(markupEl.value) : NaN;
+
+    /* Delat jobb: a-priset ar agarens, har galler det som betalades. */
+    if (S.memberJob(selectedProjectId(body))) {
+      price = cost;
+      markup = NaN;
+      if (!isFinite(cost) || cost < 0) { U.toast('Ange vad du betalade per enhet', true); return; }
+    }
+
     if (!date) { U.toast('Välj datum', true); return; }
     if (!clientId) { U.toast('Välj kund', true); return; }
     if (!description) { U.toast('Skriv vad du köpte', true); return; }
     if (!isFinite(qty) || qty <= 0) { U.toast('Ange antal', true); return; }
     if (!isFinite(price) || price < 0) { U.toast('Ange á-pris', true); return; }
 
-    var cost = costEl ? U.parseHours(costEl.value) : NaN;
-    var markup = markupEl ? U.parseHours(markupEl.value) : NaN;
     var pvatEl = body.querySelector('#m-pvat');
     var pvat = pvatEl ? U.parseHours(pvatEl.value) : NaN;
 
@@ -796,6 +887,7 @@
     var html = '';
 
     if (billed) html += lockedNotice(t);
+    html += sharedNotice(t, 'datum, sträcka och körjournal');
 
     html += '<div class="field"><label for="f-date">Datum</label>'
       + '<input type="date" id="f-date" value="' + U.esc(t ? t.date : S.todayISO()) + '"' + dis + '></div>';
@@ -810,7 +902,7 @@
         + '<button type="button" data-clear title="Nollställ">C</button></div>')
       + '</div>';
 
-    html += '<div class="row">'
+    html += '<div class="row" id="t-rate-row">'
       + '<div class="field"><label for="t-rate">Milersättning (kr/mil)</label>'
       + '<input type="text" id="t-rate" inputmode="decimal" autocomplete="off"'
       + ' value="' + U.esc(String(rate || 0).replace('.', ',')) + '"' + dis + '></div>'
@@ -864,6 +956,13 @@
 
       function updatePreview() {
         toggleAtaField(body);
+        /* Delat jobb: ersattningen satter agaren. */
+        var member = !!S.memberJob(selectedProjectId(body));
+        body.querySelector('#t-rate-row').hidden = member;
+        if (member) {
+          body.querySelector('#t-preview').innerHTML = memberPreview(selectedProjectId(body));
+          return;
+        }
         var v = values();
         var mil = S.round2(v.distance * v.rate);
         var vat = S.vatRateFor(body.querySelector('#f-client').value);
@@ -943,7 +1042,10 @@
     if (!date) { U.toast('Välj datum', true); return; }
     if (!clientId) { U.toast('Välj kund', true); return; }
     if (distance < 0 || rate < 0 || fee < 0) { U.toast('Negativa belopp går inte', true); return; }
-    if (distance * rate + fee <= 0) {
+    if (S.memberJob(selectedProjectId(body))) {
+      if (distance <= 0) { U.toast('Fyll i antal mil', true); return; }
+      fee = 0;
+    } else if (distance * rate + fee <= 0) {
       U.toast('Fyll i antal mil eller en framkörningsavgift', true);
       return;
     }

@@ -36,6 +36,11 @@
      Installningar pa varje enhet. Hur det skapas star i README. */
   var DEFAULT_CLIENT_ID = '';
 
+  /* API-nyckeln behovs bara for delade jobb (Googles filvaljare, se
+     share.js). Den ar ingen hemlighet - den begransas till appens adress i
+     Google Cloud - och foljer med i inbjudningslankarna. */
+  var DEFAULT_API_KEY = '';
+
   var SCOPES = 'https://www.googleapis.com/auth/drive.file'
     + ' https://www.googleapis.com/auth/userinfo.email';
   var FILE_NAME = 'timstock-backup.json';
@@ -48,7 +53,7 @@
      sjalva datan - de ar per enhet och ska inte folja med i en backup. */
   function loadCfg() {
     var c = {
-      clientId: '', email: '', autoSync: true,
+      clientId: '', apiKey: '', email: '', autoSync: true,
       fileId: '', lastSync: '', remoteModified: '', dirty: false
     };
     try {
@@ -56,6 +61,7 @@
       if (raw && typeof raw === 'object') Object.assign(c, raw);
     } catch (e) { /* trasig config - borja om fran standard */ }
     if (!c.clientId) c.clientId = DEFAULT_CLIENT_ID;
+    if (!c.apiKey) c.apiKey = DEFAULT_API_KEY;
     return c;
   }
 
@@ -91,6 +97,7 @@
   /* ---------- Tillstand ---------- */
 
   var syncing = false;
+  var checking = false;      // sant medan reconcile jamfor med Drive
   var suspend = false;       // sant medan en hamtad backup importeras
   var silentTried = false;   // en tyst tokenforlangning per session
   var conflictMeta = null;   // Drive-filens metadata nar versionerna skiljer sig
@@ -109,6 +116,7 @@
     return {
       configured: !!cfg.clientId,
       clientId: cfg.clientId,
+      apiKey: cfg.apiKey,
       email: cfg.email,
       connected: validToken(),
       autoSync: !!cfg.autoSync,
@@ -117,6 +125,9 @@
       conflict: !!conflictMeta,
       conflictTime: conflictMeta ? conflictMeta.modifiedTime : '',
       syncing: syncing,
+      /* Upptagen = synkar eller jamfor - de delade jobben vantar da, sa att
+         en hamtad post inte hinner gora datan "andrad" mitt i jamforelsen. */
+      busy: syncing || checking,
       lastError: lastError
     };
   }
@@ -177,6 +188,30 @@
 
   function ensureToken() {
     return validToken() ? Promise.resolve() : requestToken();
+  }
+
+  /* EN tyst forlangning per session, delad mellan backupsynken och de
+     delade jobben. Anropas fran en andring som kom fran ett klick, sa att
+     Googles ruta far oppnas - den blinkar bara forbi nar kontot redan gett
+     sitt godkannande. */
+  var renewing = null;
+
+  function renewOnce() {
+    if (validToken()) return Promise.resolve();
+    if (renewing) return renewing;
+    if (silentTried || !cfg.clientId || !cfg.email) {
+      return Promise.reject(new Error('Logga in igen under Inställningar'));
+    }
+    silentTried = true;
+    renewing = requestToken().then(fetchEmail).then(function () {
+      renewing = null;
+      emit();
+    }, function (err) {
+      renewing = null;
+      emit();
+      throw err;
+    });
+    return renewing;
   }
 
   /* E-posten ar bara for "Ansluten som ..." - misslyckas anropet funkar allt anda. */
@@ -368,7 +403,9 @@
          osynkat har
        Bada har andrats           ->  stanna och lat anvandaren valja.        */
   function reconcile() {
+    checking = true;
     return remoteMeta().then(function (meta) {
+      checking = false;
       if (!meta) {
         return doUpload(true).then(function () {
           U.toast('Säkerhetskopia sparad i Google Drive');
@@ -390,6 +427,9 @@
       conflictMeta = meta;
       emit();
       return undefined;
+    }, function (err) {
+      checking = false;
+      throw err;
     });
   }
 
@@ -420,15 +460,8 @@
     if (!cfg.autoSync || !cfg.clientId || !cfg.email || conflictMeta) { emit(); return; }
     if (validToken()) {
       scheduleUpload();
-    } else if (!silentTried) {
-      /* Anropet ligger kvar i klickets gest-kontext (andringen kom fran en
-         knapp), sa Googles ruta far oppnas - den blinkar bara forbi nar
-         kontot redan gett sitt godkannande. */
-      silentTried = true;
-      requestToken()
-        .then(function () { return fetchEmail(); })
-        .then(function () { scheduleUpload(0); })
-        .catch(function () { emit(); });
+    } else {
+      renewOnce().then(function () { scheduleUpload(0); }).catch(function () {});
     }
     emit();
   }
@@ -479,8 +512,9 @@
     });
   }
 
-  function setClientId(id) {
+  function setClientId(id, apiKey) {
     id = String(id || '').trim();
+    if (apiKey !== undefined) cfg.apiKey = String(apiKey || '').trim();
     if (id !== cfg.clientId) {
       /* Nytt klient-ID = ny app i Googles ogon: gamla filen syns inte langre. */
       cfg.clientId = id;
@@ -490,8 +524,8 @@
       conflictMeta = null;
       lastError = '';
       clearToken();
-      saveCfg();
     }
+    saveCfg();
     emit();
   }
 
@@ -538,6 +572,11 @@
     state: state, onChange: onChange,
     connect: connect, disconnect: disconnect,
     push: push, forcePush: forcePush, pull: pull,
-    setClientId: setClientId, setAutoSync: setAutoSync, afterReset: afterReset
+    setClientId: setClientId, setAutoSync: setAutoSync, afterReset: afterReset,
+    /* For de delade jobben (share.js), som anvander samma inloggning. */
+    authFetch: driveFetch, jsonOrThrow: jsonOrThrow,
+    ensureToken: ensureToken, renew: renewOnce, hasToken: validToken,
+    accessToken: function () { return validToken() ? token.value : ''; },
+    loadGsi: loadGsi
   };
 })(window);

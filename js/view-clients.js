@@ -24,27 +24,283 @@
     };
   }
 
+  /* Kunder som bara finns for att nagon annan delat ett jobb med dig visas
+     inte bland dina egna - jobben listas for sig langre ner. */
+  function ownClients(includeArchived) {
+    return S.clients(includeArchived).filter(function (c) { return !c.memberOf; });
+  }
+
   function render(el) {
     container = el;
-    var clients = S.clients(showArchived);
+    var clients = ownClients(showArchived);
+    var memberJobs = S.memberProjects();
 
     var html = '<button class="btn btn-primary btn-block" data-new-client style="margin-bottom:16px">'
       + '+ Ny kund</button>';
 
-    if (!clients.length) {
+    if (!clients.length && memberJobs.length) {
+      html += '<div class="empty small">Inga egna kunder ännu.</div>';
+    } else if (!clients.length) {
       html += '<div class="empty">Inga kunder ännu.<br>Lägg till din första kund för att komma igång.</div>';
     } else {
       html += '<div class="list">' + clients.map(clientItem).join('') + '</div>';
     }
 
-    var archivedCount = S.clients(true).filter(function (c) { return c.archived; }).length;
+    var archivedCount = ownClients(true).filter(function (c) { return c.archived; }).length;
     if (archivedCount) {
       html += '<button class="btn btn-ghost btn-block small" data-toggle-archived style="margin-top:14px">'
         + (showArchived ? 'Dölj arkiverade' : 'Visa arkiverade (' + archivedCount + ')') + '</button>';
     }
 
+    if (memberJobs.length) {
+      html += '<div class="section-title">Jobb delade med dig</div>'
+        + '<div class="list">' + memberJobs.map(memberJobItem).join('') + '</div>';
+    }
+
+    if (global.Share) {
+      html += '<button class="btn btn-ghost btn-block small" data-join-paste style="margin-top:14px">'
+        + 'Fått en inbjudan till ett jobb? Klistra in länken</button>';
+    }
+
     el.innerHTML = html;
     wire(el);
+  }
+
+  /* ---------- Delade jobb: kollegans sida ---------- */
+
+  function memberJobItem(p) {
+    var mj = p.memberOf;
+    var c = S.client(p.clientId);
+    var st = global.Share ? global.Share.status(p.id) : null;
+    var badge = '';
+    if (st && st.gone) badge = '<span class="badge badge-danger">Inte längre delat</span>';
+    else if (st && st.error) badge = '<span class="badge badge-warn">Synkfel</span>';
+    else if (st && st.pending) badge = '<span class="badge badge-warn">Osynkat</span>';
+    else if (st && st.lastSync) badge = '<span class="badge badge-ok">Synkat</span>';
+
+    var hours = S.entries({ projectId: p.id })
+      .reduce(function (s, e) { return s + Number(e.hours || 0); }, 0);
+
+    return '<button class="item" type="button" data-member-job="' + U.esc(p.id) + '">'
+      + '<div class="item-top"><span class="item-title">' + U.esc(p.name)
+      + ' <span class="badge badge-shared">Delat</span></span>'
+      + '<span class="item-amount small">' + U.hours(hours) + '</span></div>'
+      + '<div class="item-sub">'
+      + (c ? '<span>' + U.esc(c.name) + '</span><span class="dot">•</span>' : '')
+      + '<span>från ' + U.esc(mj.ownerName || mj.owner) + '</span>'
+      + badge
+      + '</div></button>';
+  }
+
+  /* "2026-08-23T14:32:05.000Z" -> "2026-08-23 15:32" (lokal tid) */
+  function syncTime(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return U.toISO(d) + ' ' + String(d.getHours()).padStart(2, '0')
+      + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  function shareErr(err) {
+    U.toast(err && err.message ? err.message : 'Något gick fel mot Google Drive', true);
+  }
+
+  function memberJobBody(p) {
+    var mj = p.memberOf;
+    var st = global.Share.status(p.id);
+    var q = { projectId: p.id };
+    var hours = S.entries(q).reduce(function (s, e) { return s + Number(e.hours || 0); }, 0);
+    var mats = S.materials(q).length;
+    var trips = S.trips(q).length;
+
+    var html = '<div class="notice notice-info" style="margin:0 0 14px">Delat av <b>'
+      + U.esc(mj.ownerName || mj.owner) + '</b>' + (mj.ownerName && mj.owner ? ' (' + U.esc(mj.owner) + ')' : '')
+      + '. Det du registrerar på jobbet skickas till ägaren och faktureras av ägaren — '
+      + 'inte av dig. Välj jobbet som kund och projekt i tidrapporten.</div>';
+
+    html += '<div class="totals" style="margin-bottom:12px">'
+      + '<div class="totals-row"><span class="muted">Dina timmar</span><span>' + U.hours(hours) + '</span></div>'
+      + (mats ? '<div class="totals-row"><span class="muted">Materialposter</span><span>' + mats + '</span></div>' : '')
+      + (trips ? '<div class="totals-row"><span class="muted">Körningar</span><span>' + trips + '</span></div>' : '')
+      + (mj.fixed ? '<div class="totals-row"><span class="muted">Fast pris</span><span>Ja — '
+        + 'markera tilläggsarbeten som ÄTA</span></div>' : '')
+      + '<div class="totals-row"><span class="muted">Senast synkad</span><span>'
+      + U.esc(st.lastSync ? syncTime(st.lastSync) : 'Aldrig') + '</span></div>'
+      + (st.pending && !st.gone
+        ? '<div class="totals-row"><span class="muted">Sedan dess</span><span>Osynkade ändringar</span></div>'
+        : '')
+      + '</div>';
+
+    if (st.gone) {
+      html += '<p class="small warn-text" style="margin:-4px 0 12px">Appen kommer inte åt jobbfilen. '
+        + 'Ägaren kan ha slutat dela jobbet eller tagit bort dig — eller så behöver filen väljas '
+        + 'igen i Googles filväljare.</p>';
+    } else if (st.error) {
+      html += '<p class="small warn-text" style="margin:-4px 0 12px">' + U.esc(st.error) + '</p>';
+    } else if (!st.connected && st.pending) {
+      html += '<p class="small muted" style="margin:-4px 0 12px">Google-inloggningen har gått ut. '
+        + 'Tryck Synka nu så skickas ändringarna.</p>';
+    }
+
+    html += '<div class="field"><label for="mj-name">Ditt namn (som ägaren ser)</label>'
+      + '<input type="text" id="mj-name" value="' + U.esc(global.Share.identity().name) + '"></div>'
+      + '<button class="btn btn-block" data-mj-name>Spara namn</button>';
+
+    html += '<button class="btn btn-primary btn-block" data-mj-sync style="margin-top:10px">'
+      + (st.gone ? 'Öppna jobbfilen igen' : 'Synka nu') + '</button>'
+      + '<button class="btn btn-danger btn-block" data-mj-leave style="margin-top:10px">Lämna jobbet</button>'
+      + '<p class="small muted" style="margin-top:8px">Lämnar du jobbet tas det och dina poster '
+      + 'på det bort här. Det du redan synkat finns kvar hos ägaren.</p>';
+    return html;
+  }
+
+  function openMemberJob(projectId) {
+    var p = S.project(projectId);
+    if (!p || !p.memberOf || !global.Share) return;
+
+    U.openSheet(p.name, '<div id="mj-box" data-project="' + U.esc(p.id) + '">'
+      + memberJobBody(p) + '</div>', function (body) {
+      body.addEventListener('click', function (ev) {
+        if (ev.target.closest('[data-mj-name]')) {
+          var name = body.querySelector('#mj-name').value.trim();
+          S.saveSettings({ shareName: name });
+          U.toast('Namnet sparat');
+          refreshMemberBox();
+          return;
+        }
+        if (ev.target.closest('[data-mj-sync]')) {
+          var wasGone = global.Share.status(p.id).gone;
+          var work = wasGone
+            ? global.Share.join(p.memberOf.fileId, '')
+            : global.Share.syncNow(p.id);
+          work.then(function () {
+            U.toast('Jobbet är synkat');
+            refreshMemberBox();
+            if (container) render(container);
+          }).catch(function (err) {
+            shareErr(err);
+            refreshMemberBox();
+          });
+          return;
+        }
+        if (ev.target.closest('[data-mj-leave]')) {
+          if (!confirm('Lämna jobbet ' + p.name + '? Dina poster på jobbet tas bort här '
+            + '(det som redan synkats finns kvar hos ägaren).')) return;
+          global.Share.leave(p.id).catch(function (err) {
+            if (!confirm('Kunde inte synka det sista (' + (err && err.message ? err.message : 'okänt fel')
+              + '). Lämna ändå? Osynkade poster går förlorade.')) return Promise.reject(null);
+            return global.Share.leave(p.id, true);
+          }).then(function () {
+            U.closeSheet();
+            U.toast('Du har lämnat jobbet');
+            if (container) render(container);
+          }).catch(function (err) { if (err) shareErr(err); });
+        }
+      });
+    });
+  }
+
+  function refreshMemberBox() {
+    var box = document.getElementById('mj-box');
+    if (!box) return;
+    var p = S.project(box.getAttribute('data-project'));
+    if (!p || !p.memberOf) return;
+    if (document.activeElement && document.activeElement.id === 'mj-name') return;
+    box.innerHTML = memberJobBody(p);
+  }
+
+  /* ---------- Gå med i ett delat jobb ---------- */
+
+  /* Inbjudningslänken öppnas oftast i webbläsaren. Har du appen på
+     hemskärmen (särskilt på iPhone, där den har egen lagring) kan länken
+     klistras in här i stället. */
+  function openPasteInvite() {
+    var html = '<div class="field"><label for="jn-link">Länken från inbjudan</label>'
+      + '<input type="url" id="jn-link" autocapitalize="off" spellcheck="false" '
+      + 'placeholder="https://…?jobb=…"></div>'
+      + '<button class="btn btn-primary btn-block" data-join-next>Fortsätt</button>';
+
+    U.openSheet('Gå med i delat jobb', html, function (body) {
+      body.addEventListener('click', function (ev) {
+        if (!ev.target.closest('[data-join-next]')) return;
+        var q;
+        try {
+          q = new URL(body.querySelector('#jn-link').value.trim()).searchParams;
+        } catch (e) { q = null; }
+        if (!q || !q.get('jobb')) {
+          U.toast('Det där ser inte ut som en inbjudningslänk', true);
+          return;
+        }
+        openJoin({ fileId: q.get('jobb'), clientId: q.get('cid') || '', apiKey: q.get('key') || '' });
+      });
+    });
+  }
+
+  /* Öppnas av app.js när appen startas från en inbjudningslänk
+     (?jobb=<fil>&cid=<klient-ID>&key=<API-nyckel>). */
+  function openJoin(params) {
+    var D = global.Drive;
+    if (!global.Share || !D || !params.fileId) return;
+
+    /* Inbjudan bär med sig ägarens klient-ID och API-nyckel, så att den som
+       aldrig rört Google Cloud bara behöver logga in. Har du ett eget
+       klient-ID gäller det. */
+    var ds = D.state();
+    if (!ds.clientId && params.clientId) {
+      D.setClientId(params.clientId, params.apiKey || '');
+    } else if (ds.clientId === params.clientId && !ds.apiKey && params.apiKey) {
+      D.setClientId(ds.clientId, params.apiKey);
+    }
+    ds = D.state();
+    if (ds.clientId) D.loadGsi().catch(function () {});
+
+    var existing = S.memberProjects().find(function (p) {
+      return p.memberOf.fileId === params.fileId;
+    });
+    var name = S.settings().shareName || S.company().name || '';
+
+    var html = '<p style="margin:0 0 12px">Du har bjudits in att registrera tid, material och '
+      + 'körningar på ett jobb i Timstock. Det du lägger in hamnar direkt hos den som bjöd in '
+      + 'dig, som fakturerar kunden.</p>'
+      + '<p class="small muted" style="margin:0 0 14px">Logga in med Google-kontot (Gmail) som '
+      + 'inbjudan skickades till. Google visar sedan jobbfilen — markera den och tryck '
+      + '<b>Välj</b>. Appen ser bara jobbfilen och sina egna filer, inget annat i din Drive.</p>';
+
+    if (existing) {
+      html += '<div class="notice notice-ok" style="margin:0 0 14px">Du är redan med i jobbet <b>'
+        + U.esc(existing.name) + '</b>.</div>';
+    }
+
+    if (!ds.clientId) {
+      html += '<div class="notice notice-warn" style="margin:0 0 14px">Länken saknar klient-ID. '
+        + 'Be den som bjöd in dig att skicka länken igen från appen, eller fyll i klient-ID under '
+        + 'Inställningar → Google Drive.</div>';
+    }
+
+    html += '<div class="field"><label for="jn-name">Ditt namn (som syns för den som bjöd in dig)</label>'
+      + '<input type="text" id="jn-name" autocomplete="name" value="' + U.esc(name) + '"></div>'
+      + '<button class="btn btn-primary btn-block" data-join' + (ds.clientId ? '' : ' disabled') + '>'
+      + (existing ? 'Synka jobbet' : 'Logga in och gå med') + '</button>';
+
+    U.openSheet('Gå med i delat jobb', html, function (body) {
+      body.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('[data-join]');
+        if (!btn) return;
+        btn.disabled = true;
+        global.Share.join(params.fileId, body.querySelector('#jn-name').value.trim())
+          .then(function (pid) {
+            var p = S.project(pid);
+            U.closeSheet();
+            U.toast('Du är med i jobbet ' + (p ? p.name : ''));
+            global.App.go('time');
+            global.App.refresh();
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            shareErr(err);
+          });
+      });
+    });
   }
 
   function clientItem(c) {
@@ -286,6 +542,7 @@
 
     return '<button class="item" type="button" data-project="' + U.esc(p.id) + '">'
       + '<div class="item-top"><span class="item-title">' + U.esc(p.name)
+      + (p.share && p.share.fileId ? ' <span class="badge badge-shared">Delat</span>' : '')
       + (p.archived ? ' <span class="badge badge-muted">Arkiverad</span>' : '') + '</span>'
       + '<span class="item-amount small">'
       + (fixed ? U.money0(S.fixedPriceOf(p)) : (rate === null ? 'Kundens pris' : U.money0(rate) + '/h'))
@@ -382,6 +639,24 @@
     var rows = '<div class="totals-row"><span class="muted">Nedlagd tid</span><span>'
       + U.hours(hours) + '</span></div>';
 
+    /* Pa ett delat jobb: vem som lagt timmarna. */
+    var people = {};
+    entries.forEach(function (e) {
+      if (!e.shared || !e.shared.author) return;
+      var key = e.shared.authorName || e.shared.author.split('@')[0];
+      people[key] = (people[key] || 0) + Number(e.hours || 0);
+    });
+    var names = Object.keys(people).sort(function (a, b) { return a.localeCompare(b, 'sv'); });
+    if (names.length) {
+      var others = names.reduce(function (s, n) { return s + people[n]; }, 0);
+      rows += '<div class="totals-row"><span class="small muted">varav du</span><span class="small muted">'
+        + U.hours(hours - others) + '</span></div>'
+        + names.map(function (n) {
+          return '<div class="totals-row"><span class="small muted">varav ' + U.esc(n)
+            + '</span><span class="small muted">' + U.hours(people[n]) + '</span></div>';
+        }).join('');
+    }
+
     if (matTotal) {
       rows += '<div class="totals-row"><span class="muted">Material</span><span>'
         + U.money(matTotal) + '</span></div>';
@@ -452,6 +727,166 @@
       + 'Uppdelningen ska vara rimlig och gå att styrka — ROT ges bara på arbetet.';
   }
 
+  /* ---------- Delade jobb: ägarens sida ---------- */
+
+  function shareBoxHTML(p) {
+    var st = global.Share.status(p.id);
+    var shared = !!(p.share && p.share.fileId);
+    var html = '';
+
+    if (!st.configured || !st.email) {
+      return '<p class="small muted" style="margin:0 0 10px">Låt en kollega registrera tid, '
+        + 'material och körningar på jobbet från sin egen telefon. Posterna hamnar här och '
+        + 'faktureras av dig som vanligt. Koppla först Google Drive under Inställningar.</p>'
+        + '<button class="btn btn-block" data-share-settings>Till Inställningar</button>';
+    }
+
+    if (!shared) {
+      html += '<p class="small muted" style="margin:0 0 10px">Bjud in en kollega med Gmail-adress. '
+        + 'Kollegan får en länk, loggar in med sitt Google-konto och kan sedan registrera tid, '
+        + 'material och körningar på jobbet från sin egen telefon. Posterna hamnar här och '
+        + 'faktureras av dig som vanligt. Kollegan ser aldrig dina priser.</p>';
+    } else {
+      var contrib = global.Share.contributions(p.id);
+      var members = p.share.members || [];
+      html += '<div class="totals" style="margin-bottom:12px">';
+      if (!members.length) {
+        html += '<div class="totals-row"><span class="muted">Inga inbjudna kvar</span><span></span></div>';
+      }
+      members.forEach(function (m) {
+        var c = contrib[m.email];
+        html += '<div class="totals-row"><span>' + U.esc(c && c.name ? c.name + ' · ' : '')
+          + '<span class="muted">' + U.esc(m.email) + '</span></span><span class="small">'
+          + (c ? c.count + ' poster' + (c.hours ? ' · ' + U.hours(c.hours) : '') : 'Inget ännu')
+          + ' <button type="button" class="link-btn" data-share-remove="' + U.esc(m.email)
+          + '">Ta bort</button></span></div>';
+      });
+      html += '<div class="totals-row"><span class="muted">Senast hämtat</span><span>'
+        + U.esc(st.lastSync ? syncTime(st.lastSync) : 'Aldrig') + '</span></div>'
+        + '</div>';
+      if (st.gone) {
+        html += '<p class="small warn-text" style="margin:-4px 0 12px">Jobbfilen finns inte längre '
+          + 'i din Drive. Sluta dela och bjud in på nytt om kollegorna ska fortsätta.</p>';
+      } else if (st.error) {
+        html += '<p class="small warn-text" style="margin:-4px 0 12px">' + U.esc(st.error) + '</p>';
+      }
+    }
+
+    if (!st.apiKey) {
+      html += '<p class="small warn-text" style="margin:0 0 10px">API-nyckel saknas under '
+        + 'Inställningar → Google Drive. Utan den kan kollegan inte öppna jobbet — se README, '
+        + 'avsnittet Delade jobb.</p>';
+    }
+
+    html += '<div class="field" style="margin-bottom:10px"><label for="sh-email">Kollegans Gmail-adress</label>'
+      + '<input type="email" id="sh-email" autocapitalize="off" autocomplete="off" '
+      + 'placeholder="kollega@gmail.com"></div>'
+      + '<button class="btn btn-block' + (shared ? '' : ' btn-primary') + '" data-share-invite>'
+      + (shared ? 'Bjud in fler' : 'Bjud in') + '</button>';
+
+    if (shared) {
+      html += '<button class="btn btn-block" data-share-link style="margin-top:10px">Skicka inbjudningslänken</button>'
+        + '<button class="btn btn-block" data-share-sync style="margin-top:10px">Hämta kollegornas poster nu</button>'
+        + '<button class="btn btn-danger btn-block" data-share-stop style="margin-top:10px">Sluta dela</button>';
+    }
+    return html;
+  }
+
+  function refreshShareBox() {
+    var box = document.getElementById('share-box');
+    if (!box) return;
+    var p = S.project(box.getAttribute('data-project'));
+    if (!p) return;
+    if (document.activeElement && document.activeElement.id === 'sh-email') return;
+    box.innerHTML = shareBoxHTML(p);
+  }
+
+  /* Telefonens delningsmeny (sms, mejl ...), annars kopiera. */
+  function sendLink(p, link) {
+    var text = 'Du är inbjuden att registrera tid och material på jobbet "' + p.name
+      + '" i Timstock. Öppna länken och logga in med ditt Google-konto:';
+    if (navigator.share) {
+      return navigator.share({ title: 'Timstock – ' + p.name, text: text, url: link })
+        .catch(function () {});
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text + ' ' + link).then(function () {
+        U.toast('Länken är kopierad');
+      }, function () { global.prompt('Kopiera länken:', link); });
+    }
+    global.prompt('Kopiera länken:', link);
+    return Promise.resolve();
+  }
+
+  /* Klick i delningsrutan. Sant om klicket hanterades. */
+  function shareClick(ev, p, body) {
+    if (!p) return false;
+    var Sh = global.Share;
+
+    if (ev.target.closest('[data-share-settings]')) {
+      global.App.go('settings');
+      return true;
+    }
+
+    if (ev.target.closest('[data-share-invite]')) {
+      var input = body.querySelector('#sh-email');
+      var email = input ? input.value.trim() : '';
+      var btn = ev.target.closest('[data-share-invite]');
+      btn.disabled = true;
+      Sh.invite(p.id, email).then(function () {
+        /* Google mejlar inbjudan med lanken. Vill man hellre sms:a finns
+           knappen Skicka inbjudningslanken - delningsmenyn kraver ett nytt
+           klick, den far inte oppnas efter ett natverksanrop. */
+        U.toast('Inbjudan mejlad till ' + email);
+        if (input) input.value = '';
+        refreshShareBox();
+        if (container) render(container);
+      }).catch(function (err) {
+        btn.disabled = false;
+        shareErr(err);
+      });
+      return true;
+    }
+
+    if (ev.target.closest('[data-share-link]')) {
+      sendLink(p, Sh.inviteLink(p.share.fileId));
+      return true;
+    }
+
+    var rm = ev.target.closest('[data-share-remove]');
+    if (rm) {
+      var who = rm.getAttribute('data-share-remove');
+      if (!confirm('Ta bort ' + who + ' från jobbet? Det som redan hämtats ligger kvar.')) return true;
+      Sh.removeMember(p.id, who).then(function () {
+        U.toast(who + ' är borttagen');
+        refreshShareBox();
+      }).catch(shareErr);
+      return true;
+    }
+
+    if (ev.target.closest('[data-share-sync]')) {
+      Sh.syncNow(p.id).then(function (count) {
+        U.toast(count ? count + ' poster hämtade' : 'Inget nytt från kollegorna');
+        refreshShareBox();
+        if (container) render(container);
+      }).catch(shareErr);
+      return true;
+    }
+
+    if (ev.target.closest('[data-share-stop]')) {
+      if (!confirm('Sluta dela ' + p.name + '? Kollegorna kommer inte åt jobbet längre. '
+        + 'Det som redan hämtats ligger kvar här.')) return true;
+      Sh.stopSharing(p.id).then(function () {
+        U.toast('Jobbet delas inte längre');
+        refreshShareBox();
+        if (container) render(container);
+      }).catch(shareErr);
+      return true;
+    }
+
+    return false;
+  }
+
   function openProject(id, clientId) {
     var p = id ? S.project(id) : null;
     var c = S.client(clientId);
@@ -512,6 +947,11 @@
 
     if (p) html += outcomeHTML(p);
 
+    if (p && global.Share) {
+      html += '<div class="section-title" style="margin-left:0">Dela jobbet</div>'
+        + '<div id="share-box" data-project="' + U.esc(p.id) + '">' + shareBoxHTML(p) + '</div>';
+    }
+
     html += '<button class="btn btn-primary btn-block" data-save-project style="margin-top:14px">'
       + (p ? 'Spara projekt' : 'Lägg till projekt') + '</button>';
 
@@ -566,7 +1006,12 @@
           render(container);
           return;
         }
+        if (shareClick(ev, p, body)) return;
         if (ev.target.closest('[data-delete-project]')) {
+          if (p.share && p.share.fileId) {
+            U.toast('Projektet är delat — sluta dela det först', true);
+            return;
+          }
           if (!confirm('Ta bort projektet ' + p.name + '?')) return;
           if (S.deleteProject(p.id)) {
             U.toast('Projekt borttaget');
@@ -584,8 +1029,20 @@
     if (el.dataset.wired) return;
     el.dataset.wired = '1';
 
+    /* Synken byter tillstand i bakgrunden - rita om det som syns. */
+    if (global.Share) {
+      global.Share.onChange(function () {
+        refreshShareBox();
+        refreshMemberBox();
+        if (!el.hidden && document.contains(el) && S.memberProjects().length) render(el);
+      });
+    }
+
     el.addEventListener('click', function (ev) {
       if (ev.target.closest('[data-new-client]')) { openClient(null); return; }
+      if (ev.target.closest('[data-join-paste]')) { openPasteInvite(); return; }
+      var mjEl = ev.target.closest('[data-member-job]');
+      if (mjEl) { openMemberJob(mjEl.getAttribute('data-member-job')); return; }
       var c = ev.target.closest('[data-client]');
       if (c) { openClient(c.getAttribute('data-client')); return; }
       if (ev.target.closest('[data-toggle-archived]')) {
@@ -600,6 +1057,7 @@
     title: 'Kunder & projekt',
     actions: '<button class="icon-btn" data-act="new" aria-label="Ny kund">+</button>',
     onAction: function (act) { if (act === 'new') openClient(null); },
-    render: render
+    render: render,
+    openJoin: openJoin
   };
 })(window);
