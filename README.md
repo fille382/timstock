@@ -526,6 +526,22 @@ det sista, lägger jobbfilen i papperskorgen i Drive och stänger jobbet för
 alla — de poster du redan hämtat ligger kvar. Ett delat projekt kan inte tas
 bort förrän det slutat delas.
 
+### Om kollegan inte kommer in
+
+Går något fel när kollegan går med visas en ruta som ligger kvar: vilket steg
+som stoppade, vilket Google-konto kollegan är inloggad med, Googles felkod och
+vad man kan göra. Ta en skärmdump av den. De vanligaste orsakerna:
+
+- **Fel Google-konto** — filväljaren är tom eftersom kontot inte är det
+  inbjudan gick till. Tryck **Byt Google-konto** och välj rätt.
+- **Länken öppnad inne i en annan app** (Messenger, Instagram …) — där
+  tillåter Google inte inloggning. Appen varnar; öppna länken i Safari eller
+  Chrome.
+- **Jobb- eller skolkonto** (`admin_policy_enforced`) — administratören
+  släpper inte in okända appar. Använd ett privat Gmail-konto.
+- **Inloggningsrutan stängdes** — Google visade troligen ett fel i sin egen
+  ruta. Skärmdumpen av Googles text (t.ex. "Error 400: …") säger vad.
+
 ### Bra att veta
 
 - Jobbfilen är en brevlåda: var och en skriver bara sina egna poster. Drive

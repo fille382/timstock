@@ -818,7 +818,16 @@
               if (ok) resolve();
               else reject(new Error('Fel fil vald — välj jobbfilen från inbjudan'));
             } else if (action === g.Action.CANCEL) {
-              reject(new Error('Ingen fil vald — jobbet öppnades inte'));
+              var e = new Error('Filväljaren stängdes utan att jobbfilen valdes');
+              e.code = 'cancel';
+              e.hint = 'Syntes ingen fil i listan? Då är du troligen inloggad med ett annat '
+                + 'Google-konto än det inbjudan skickades till — tryck Byt Google-konto. Visade '
+                + 'filväljaren ett felmeddelande? Ta en skärmdump av det.';
+              reject(e);
+            } else if (action && action !== 'loaded') {
+              var f = new Error('Googles filväljare svarade med ett fel');
+              f.code = String(action);
+              reject(f);
             }
           });
         if (ds.apiKey) builder.setDeveloperKey(ds.apiKey);
@@ -854,24 +863,59 @@
     return S.memberProjects().find(function (p) { return p.memberOf.fileId === fileId; }) || null;
   }
 
+  /* Fel under "ga med" bar med sig vilket steg som stoppade, vilket konto
+     som var inloggat och vad man kan gora - de visas kvar i rutan sa att
+     det gar att ta en skarmdump. */
+  function stepError(err, step, hint) {
+    if (!err.step) err.step = step;
+    if (!err.hint && hint) err.hint = hint;
+    err.account = D.state().email || '';
+    return err;
+  }
+
   /* Anropas fran ett klick: inloggningsrutan maste oppnas i klickets
-     gest-kontext. Returnerar projektets id. */
-  function join(fileId, name) {
+     gest-kontext. Returnerar projektets id. switchAccount: lat anvandaren
+     valja ett annat Google-konto an det som ar inloggat. */
+  function join(fileId, name, switchAccount) {
     var own = S.sharedProjects().some(function (p) { return p.share.fileId === fileId; });
     if (own) return Promise.reject(new Error('Det här är ditt eget delade jobb'));
 
     var ds = D.state();
-    var login = ds.connected && ds.email ? Promise.resolve() : D.connect();
+    var login = ds.connected && ds.email && !switchAccount
+      ? Promise.resolve()
+      : D.connect(!!switchAccount).catch(function (err) {
+        /* Sakerhetskopian ar en bisak har - gick inloggningen igenom kan
+           jobbet oppnas anda. */
+        if (err.step === 'Säkerhetskopian i Drive' && D.hasToken()) return;
+        throw err;
+      });
 
-    return login.then(function () {
-      if (!D.state().email) throw new Error('Kunde inte se vilket Google-konto du loggade in med');
+    return login.catch(function (err) {
+      throw stepError(err, 'Inloggning hos Google');
+    }).then(function () {
+      if (!D.state().email) {
+        throw stepError(new Error('Kunde inte se vilket Google-konto du loggade in med'),
+          'Inloggning hos Google', 'Försök igen.');
+      }
       return readDoc(fileId).catch(function (err) {
-        if (!err.gone) throw err;
-        return pick(fileId).then(function () { return readDoc(fileId); });
+        if (!err.gone) throw stepError(err, 'Öppna jobbfilen');
+        return pick(fileId).catch(function (err2) {
+          throw stepError(err2, 'Googles filväljare');
+        }).then(function () {
+          return readDoc(fileId).catch(function (err3) {
+            if (!err3.gone) throw stepError(err3, 'Öppna jobbfilen');
+            throw stepError(new Error('Filen valdes, men Google släpper ändå inte in appen'),
+              'Öppna jobbfilen', 'Det beror oftast på att API-nyckeln kommer från ett annat '
+                + 'Google Cloud-projekt än klient-ID:t. Be den som bjöd in dig kontrollera '
+                + 'nyckeln under Inställningar → Google Drive.');
+          });
+        });
       });
     }).then(function (doc) {
       if (doc.job.owner && doc.job.owner === D.state().email) {
-        throw new Error('Det här är ditt eget delade jobb');
+        throw stepError(new Error('Det här är ditt eget delade jobb'), 'Öppna jobbfilen',
+          'Du är inloggad med samma konto som delade jobbet. Kollegan ska logga in med sitt '
+            + 'eget konto.');
       }
       if (name && name !== S.settings().shareName) S.saveSettings({ shareName: name });
 
