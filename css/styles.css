@@ -438,6 +438,27 @@ input:focus, select:focus, textarea:focus {
 .notice-warn { background: var(--warn-soft); border-color: var(--warn); }
 .notice-info { background: var(--accent-soft); border-color: var(--accent); }
 
+/* Nodutgang ur Googles filvaljare (delade jobb). Ligger ovanpa valjarens
+   gra bakgrund, som annars kan ta over hela sidan om rutan aldrig laddas. */
+.picker-escape {
+  position: fixed;
+  left: 50%;
+  bottom: calc(14px + var(--safe-b));
+  transform: translateX(-50%);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font-size: .85rem;
+  white-space: nowrap;
+}
+.picker-escape .btn { min-height: 38px; padding: 6px 14px; }
+
 /* Liten textknapp inne i en summeringsrad, t.ex. Ta bort pa en kollega. */
 .link-btn {
   margin-left: 6px;

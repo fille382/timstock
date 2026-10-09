@@ -794,6 +794,20 @@
   /* Googles filvaljare, filtrerad till jobbfilen. Nar den valts far appen
      se och skriva filen med drive.file-behorigheten. Projektnumret som
      valjaren vill ha ar forsta delen av klient-ID:t. */
+  /* Fastnar filvaljaren - laddar aldrig, eller hamnar utanfor skarmen pa
+     en smal telefon - ligger Googles gra bakgrund kvar over hela sidan
+     utan nagot att trycka pa. Den har knappen ligger ovanpa och tar en
+     alltid ur den. */
+  function escapeBar(onClose) {
+    var bar = document.createElement('div');
+    bar.className = 'picker-escape no-print';
+    bar.innerHTML = '<span>Fastnat?</span>'
+      + '<button type="button" class="btn">Stäng filväljaren</button>';
+    bar.querySelector('button').addEventListener('click', onClose);
+    document.body.appendChild(bar);
+    return bar;
+  }
+
   function pick(fileId) {
     var ds = D.state();
     return loadPicker().then(function () {
@@ -802,6 +816,18 @@
         var view = new g.DocsView(g.ViewId.DOCS).setMode(g.DocsViewMode.LIST);
         if (typeof view.setFileIds === 'function') view.setFileIds(fileId);
         else view.setOwnedByMe(false);
+
+        var loaded = false;
+        var settled = false;
+        var picker = null;
+        var bar = null;
+
+        function finish(fn, arg) {
+          if (settled) return;
+          settled = true;
+          if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
+          fn(arg);
+        }
 
         var builder = new g.PickerBuilder()
           .setAppId(String(ds.clientId).split('-')[0])
@@ -812,11 +838,13 @@
           .setTitle('Markera jobbfilen och tryck Välj')
           .setCallback(function (data) {
             var action = data[g.Response.ACTION];
-            if (action === g.Action.PICKED) {
+            if (action === 'loaded') {
+              loaded = true;
+            } else if (action === g.Action.PICKED) {
               var docs = data[g.Response.DOCUMENTS] || [];
               var ok = docs.some(function (d) { return d[g.Document.ID] === fileId; });
-              if (ok) resolve();
-              else reject(new Error('Fel fil vald — välj jobbfilen från inbjudan'));
+              if (ok) finish(resolve);
+              else finish(reject, new Error('Fel fil vald — välj jobbfilen från inbjudan'));
             } else if (action === g.Action.CANCEL) {
               var e = new Error('Filväljaren stängdes utan att jobbfilen valdes');
               e.code = 'cancel';
@@ -825,18 +853,40 @@
                 + '"API-utvecklarnyckeln är ogiltig"? Då saknar API-nyckeln https://docs.google.com/* '
                 + 'under Websites i Google Cloud — be den som bjöd in dig lägga till det. Annat '
                 + 'felmeddelande? Ta en skärmdump av det.';
-              reject(e);
-            } else if (action && action !== 'loaded') {
+              finish(reject, e);
+            } else if (action) {
               var f = new Error('Googles filväljare svarade med ett fel');
               f.code = String(action);
-              reject(f);
+              finish(reject, f);
             }
           });
         if (ds.apiKey) builder.setDeveloperKey(ds.apiKey);
-        builder.build().setVisible(true);
+        /* Sa stor som skarmen tillater (Google har en minsta storlek), med
+           plats under for knappen som tar en ur. */
+        if (typeof builder.setSize === 'function') {
+          builder.setSize(Math.min(1051, global.innerWidth - 16),
+            Math.min(650, global.innerHeight - 140));
+        }
+
+        picker = builder.build();
+        picker.setVisible(true);
+
+        bar = escapeBar(function () {
+          try { picker.setVisible(false); picker.dispose(); } catch (x) { /* redan borta */ }
+          var e = new Error(loaded ? 'Filväljaren stängdes' : 'Googles filväljare visades aldrig');
+          e.code = loaded ? 'closed' : 'not_loaded';
+          e.hint = loaded
+            ? 'Syntes ingen fil att välja? Då är du troligen inloggad med ett annat Google-konto '
+              + 'än det inbjudan skickades till — tryck Byt Google-konto.'
+            : 'Det vanligaste är att webbläsaren blockerar cookies från andra sajter — en privat '
+              + 'flik, eller Safari med "Förhindra spårning mellan webbplatser" påslaget. Prova i '
+              + 'en vanlig flik i Chrome. Syntes ett felmeddelande? Ta en skärmdump av det.';
+          finish(reject, e);
+        });
       });
     });
   }
+
 
   function createMemberJob(fileId, doc) {
     var j = doc.job;
