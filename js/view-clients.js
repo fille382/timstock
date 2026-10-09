@@ -102,7 +102,35 @@
   }
 
   function shareErr(err) {
-    U.toast(err && err.message ? err.message : 'Något gick fel mot Google Drive', true);
+    var msg = err && err.message ? err.message : 'Något gick fel mot Google Drive';
+    U.toast(msg + (err && err.hint ? ' — ' + err.hint : ''), true);
+  }
+
+  /* Felruta som ligger kvar (en toast hinner försvinna innan man tagit en
+     skärmdump): vilket steg som stoppade, vilket konto som var inloggat,
+     Googles felkod och vad man kan göra. */
+  function joinErrorHTML(err) {
+    err = err || {};
+    var account = err.account || (global.Drive && global.Drive.state().email) || '';
+    var rows = (err.step ? 'Steg: ' + U.esc(err.step) + '<br>' : '')
+      + 'Inloggad som: ' + U.esc(account || 'inte inloggad')
+      + (err.code ? '<br>Felkod: ' + U.esc(err.code) : '');
+    return '<div class="notice notice-warn" role="alert" style="margin:0 0 14px">'
+      + '<b>' + U.esc(err.message || 'Något gick fel') + '</b>'
+      + '<div class="small" style="margin-top:6px">' + rows + '</div>'
+      + (err.hint ? '<p style="margin:8px 0 0">' + U.esc(err.hint) + '</p>' : '')
+      + '</div>'
+      + (account
+        ? '<button class="btn btn-block" data-join-switch style="margin-bottom:10px">'
+          + 'Byt Google-konto</button>'
+        : '');
+  }
+
+  /* Facebook, Instagram, Messenger m.fl. öppnar länkar i en inbyggd
+     webbläsare där Google inte tillåter inloggning. */
+  function inAppBrowser() {
+    return /FBAN|FBAV|FB_IAB|Instagram|Line\/|Snapchat|MicroMessenger|; wv\)/
+      .test(navigator.userAgent || '');
   }
 
   function memberJobBody(p) {
@@ -159,7 +187,23 @@
     if (!p || !p.memberOf || !global.Share) return;
 
     U.openSheet(p.name, '<div id="mj-box" data-project="' + U.esc(p.id) + '">'
-      + memberJobBody(p) + '</div>', function (body) {
+      + memberJobBody(p) + '</div><div id="mj-error"></div>', function (body) {
+      function reopen(switchAccount) {
+        var errBox = body.querySelector('#mj-error');
+        errBox.innerHTML = '';
+        var work = switchAccount || global.Share.status(p.id).gone
+          ? global.Share.join(p.memberOf.fileId, '', switchAccount)
+          : global.Share.syncNow(p.id);
+        work.then(function () {
+          U.toast('Jobbet är synkat');
+          refreshMemberBox();
+          if (container) render(container);
+        }).catch(function (err) {
+          errBox.innerHTML = joinErrorHTML(err);
+          refreshMemberBox();
+        });
+      }
+
       body.addEventListener('click', function (ev) {
         if (ev.target.closest('[data-mj-name]')) {
           var name = body.querySelector('#mj-name').value.trim();
@@ -168,21 +212,8 @@
           refreshMemberBox();
           return;
         }
-        if (ev.target.closest('[data-mj-sync]')) {
-          var wasGone = global.Share.status(p.id).gone;
-          var work = wasGone
-            ? global.Share.join(p.memberOf.fileId, '')
-            : global.Share.syncNow(p.id);
-          work.then(function () {
-            U.toast('Jobbet är synkat');
-            refreshMemberBox();
-            if (container) render(container);
-          }).catch(function (err) {
-            shareErr(err);
-            refreshMemberBox();
-          });
-          return;
-        }
+        if (ev.target.closest('[data-mj-sync]')) { reopen(false); return; }
+        if (ev.target.closest('[data-join-switch]')) { reopen(true); return; }
         if (ev.target.closest('[data-mj-leave]')) {
           if (!confirm('Lämna jobbet ' + p.name + '? Dina poster på jobbet tas bort här '
             + '(det som redan synkats finns kvar hos ägaren).')) return;
@@ -271,6 +302,12 @@
         + U.esc(existing.name) + '</b>.</div>';
     }
 
+    if (inAppBrowser()) {
+      html += '<div class="notice notice-warn" style="margin:0 0 14px">Länken verkar ha öppnats '
+        + 'inne i en annan app. Där tillåter Google inte inloggning — öppna länken i Safari eller '
+        + 'Chrome i stället (oftast via menyn ⋯ → Öppna i webbläsare).</div>';
+    }
+
     if (!ds.clientId) {
       html += '<div class="notice notice-warn" style="margin:0 0 14px">Länken saknar klient-ID. '
         + 'Be den som bjöd in dig att skicka länken igen från appen, eller fyll i klient-ID under '
@@ -279,15 +316,19 @@
 
     html += '<div class="field"><label for="jn-name">Ditt namn (som syns för den som bjöd in dig)</label>'
       + '<input type="text" id="jn-name" autocomplete="name" value="' + U.esc(name) + '"></div>'
+      + '<div id="jn-error"></div>'
       + '<button class="btn btn-primary btn-block" data-join' + (ds.clientId ? '' : ' disabled') + '>'
       + (existing ? 'Synka jobbet' : 'Logga in och gå med') + '</button>';
 
     U.openSheet('Gå med i delat jobb', html, function (body) {
       body.addEventListener('click', function (ev) {
-        var btn = ev.target.closest('[data-join]');
-        if (!btn) return;
+        var switchAccount = !!ev.target.closest('[data-join-switch]');
+        if (!switchAccount && !ev.target.closest('[data-join]')) return;
+        var btn = body.querySelector('[data-join]');
+        var errBox = body.querySelector('#jn-error');
         btn.disabled = true;
-        global.Share.join(params.fileId, body.querySelector('#jn-name').value.trim())
+        errBox.innerHTML = '';
+        global.Share.join(params.fileId, body.querySelector('#jn-name').value.trim(), switchAccount)
           .then(function (pid) {
             var p = S.project(pid);
             U.closeSheet();
@@ -297,7 +338,8 @@
           })
           .catch(function (err) {
             btn.disabled = false;
-            shareErr(err);
+            btn.textContent = 'Försök igen';
+            errBox.innerHTML = joinErrorHTML(err);
           });
       });
     });

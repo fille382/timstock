@@ -153,7 +153,58 @@
     return gsiPromise;
   }
 
-  function requestToken() {
+  /* Googles felkoder, oversatta till vad man ska gora. Manga fel visar
+     Google bara i sin egen ruta - stangs den kommer vi bara veta att den
+     stangdes, och da ar en skarmdump av Googles text det som hjalper. */
+  function authHelp(code) {
+    switch (code) {
+      case 'access_denied':
+        return 'Google nekade inloggningen. Tryckte du Avbryt? Försök igen och godkänn. Kommer '
+          + 'felet ändå: kontrollera att appen är publicerad i Google Cloud (Google Auth '
+          + 'Platform → Audience → In production).';
+      case 'admin_policy_enforced':
+        return 'Kontot styrs av en administratör (jobb- eller skolkonto) som inte släpper in '
+          + 'Timstock. Logga in med ett privat Gmail-konto i stället.';
+      case 'disallowed_useragent':
+        return 'Google tillåter inte inloggning i den här webbläsaren. Öppna länken i Safari '
+          + 'eller Chrome i stället för inne i en annan app.';
+      case 'org_internal':
+        return 'Appen är begränsad till en organisation. Ändra User type till External i '
+          + 'Google Cloud (Google Auth Platform → Audience).';
+      case 'invalid_client':
+      case 'unauthorized_client':
+        return 'Google känner inte igen appens klient-ID. Kontrollera klient-ID:t under '
+          + 'Inställningar → Google Drive (eller i inbjudningslänken).';
+      case 'origin_mismatch':
+      case 'redirect_uri_mismatch':
+        return 'Adressen ' + global.location.origin + ' saknas under Authorized JavaScript '
+          + 'origins för klient-ID:t i Google Cloud.';
+      case 'popup_failed_to_open':
+        return 'Webbläsaren blockerade Googles inloggningsruta. Tillåt popup-fönster för sidan '
+          + 'och försök igen.';
+      case 'popup_closed':
+        return 'Inloggningsrutan stängdes innan inloggningen var klar. Visade Google ett '
+          + 'felmeddelande där? Ta en skärmdump — koden (t.ex. "Error 400: …") berättar vad '
+          + 'som är fel.';
+      default:
+        return '';
+    }
+  }
+
+  function authError(code, desc) {
+    var msg = code === 'popup_failed_to_open' ? 'Webbläsaren blockerade inloggningsrutan'
+      : code === 'popup_closed' ? 'Inloggningsrutan stängdes'
+        : 'Google stoppade inloggningen';
+    var e = new Error(msg);
+    e.step = 'Inloggning hos Google';
+    e.code = code || '';
+    e.hint = authHelp(code) || (desc ? 'Google svarade: ' + desc : '');
+    return e;
+  }
+
+  /* selectAccount: lat anvandaren valja konto i stallet for att Google tar
+     det som anvants forut. */
+  function requestToken(selectAccount) {
     return loadGsi().then(function () {
       return new Promise(function (resolve, reject) {
         var tc = global.google.accounts.oauth2.initTokenClient({
@@ -161,7 +212,7 @@
           scope: SCOPES,
           callback: function (resp) {
             if (!resp || resp.error) {
-              reject(new Error('Inloggningen nekades eller avbröts'));
+              reject(authError(resp && resp.error, resp && resp.error_description));
               return;
             }
             token = {
@@ -173,14 +224,11 @@
             resolve();
           },
           error_callback: function (err) {
-            var t = err && err.type;
-            reject(new Error(t === 'popup_failed_to_open'
-              ? 'Webbläsaren blockerade inloggningsrutan'
-              : 'Inloggningsrutan stängdes'));
+            reject(authError((err && err.type) || 'unknown'));
           }
         });
-        var opts = { prompt: '' };
-        if (cfg.email) opts.login_hint = cfg.email;
+        var opts = { prompt: selectAccount ? 'select_account' : '' };
+        if (cfg.email && !selectAccount) opts.login_hint = cfg.email;
         tc.requestAccessToken(opts);
       });
     });
@@ -219,7 +267,17 @@
     return driveFetch('https://www.googleapis.com/oauth2/v3/userinfo')
       .then(function (res) { return res.ok ? res.json() : {}; })
       .then(function (j) {
-        if (j && j.email) { cfg.email = j.email; saveCfg(); }
+        if (!j || !j.email) return;
+        /* Ett annat konto an sist har en annan sakerhetskopia - glom den
+           gamla filen, sa att jamforelsen borjar om i stallet for att en
+           frammande kopia hamtas over den har enhetens data. */
+        if (cfg.fileOwner && cfg.fileOwner !== j.email) {
+          cfg.fileId = '';
+          cfg.remoteModified = '';
+        }
+        cfg.fileOwner = j.email;
+        cfg.email = j.email;
+        saveCfg();
       })
       .catch(function () {});
   }
@@ -478,10 +536,15 @@
 
   /* ---------- Publikt ---------- */
 
-  function connect() {
+  function connect(selectAccount) {
     if (!cfg.clientId) return Promise.reject(new Error('Fyll i klient-ID först'));
     silentTried = false;
-    return requestToken().then(fetchEmail).then(reconcile);
+    return requestToken(selectAccount).then(fetchEmail).then(function () {
+      return reconcile().catch(function (err) {
+        if (!err.step) err.step = 'Säkerhetskopian i Drive';
+        throw err;
+      });
+    });
   }
 
   function disconnect() {

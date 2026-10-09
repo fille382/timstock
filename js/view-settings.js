@@ -234,7 +234,8 @@
   function driveErr(err) {
     /* En konflikt har redan sitt eget vagval i kortet - inget felmeddelande. */
     if (err && err.conflict) return;
-    U.toast(err && err.message ? err.message : 'Något gick fel mot Google Drive', true);
+    var msg = err && err.message ? err.message : 'Något gick fel mot Google Drive';
+    U.toast(msg + (err && err.hint ? ' — ' + err.hint : ''), true);
   }
 
   /* Ritar bara om Drive-kortet - en hel omritning av vyn skulle kasta bort

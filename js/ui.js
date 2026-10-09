@@ -91,7 +91,10 @@
     el.className = 'toast no-print' + (isError ? ' err' : '');
     el.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.hidden = true; }, 2600);
+    /* Langre text (t.ex. ett felmeddelande med rad om vad man gor) far
+       ligga kvar langre, upp till tio sekunder. */
+    var ms = Math.min(10000, Math.max(2600, String(msg).length * 55));
+    toastTimer = setTimeout(function () { el.hidden = true; }, ms);
   }
 
   /* ---------- Bottom sheet ---------- */
