@@ -821,8 +821,10 @@
               var e = new Error('Filväljaren stängdes utan att jobbfilen valdes');
               e.code = 'cancel';
               e.hint = 'Syntes ingen fil i listan? Då är du troligen inloggad med ett annat '
-                + 'Google-konto än det inbjudan skickades till — tryck Byt Google-konto. Visade '
-                + 'filväljaren ett felmeddelande? Ta en skärmdump av det.';
+                + 'Google-konto än det inbjudan skickades till — tryck Byt Google-konto. Stod det '
+                + '"API-utvecklarnyckeln är ogiltig"? Då saknar API-nyckeln https://docs.google.com/* '
+                + 'under Websites i Google Cloud — be den som bjöd in dig lägga till det. Annat '
+                + 'felmeddelande? Ta en skärmdump av det.';
               reject(e);
             } else if (action && action !== 'loaded') {
               var f = new Error('Googles filväljare svarade med ett fel');

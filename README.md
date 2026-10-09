@@ -406,11 +406,14 @@ gratis i Google Cloud Console och tar några minuter:
 5. Kopiera klient-ID:t (slutar på `.apps.googleusercontent.com`) och klistra
    in det under **Inställningar → Google Drive** i appen.
 6. *Bara för delade jobb:* **Credentials → Create credentials → API key**.
-   Begränsa nyckeln under **Application restrictions → Websites** till
-   appens adress (t.ex. `https://dittnamn.github.io/*`) och under **API
-   restrictions** till **Google Picker API**. Klistra in den i fältet
+   Begränsa nyckeln under **Application restrictions → Websites** till två
+   adresser: appens (t.ex. `https://dittnamn.github.io/*`) och
+   `https://docs.google.com/*`. Den andra behövs eftersom Googles filväljare
+   körs från docs.google.com — saknas den säger filväljaren
+   *API-utvecklarnyckeln är ogiltig*. Begränsa sedan under **API restrictions** till
+   **Google Picker API**. Klistra in nyckeln i fältet
    **API-nyckel** under Inställningar → Google Drive. Nyckeln är ingen
-   hemlighet — den fungerar bara från din adress — och följer med i
+   hemlighet — den fungerar bara från din adress och Googles filväljare — och följer med i
    inbjudningslänkarna.
 
 Samma klient-ID används på alla dina enheter. Vill du slippa klistra in det
@@ -541,6 +544,11 @@ vad man kan göra. Ta en skärmdump av den. De vanligaste orsakerna:
   släpper inte in okända appar. Använd ett privat Gmail-konto.
 - **Inloggningsrutan stängdes** — Google visade troligen ett fel i sin egen
   ruta. Skärmdumpen av Googles text (t.ex. "Error 400: …") säger vad.
+- **"API-utvecklarnyckeln är ogiltig"** i filväljaren — API-nyckelns
+  webbplatsbegränsning saknar `https://docs.google.com/*` (se steg 6 ovan).
+- **Filväljaren ber kollegan logga in igen** — webbläsaren blockerar cookies
+  från andra sajter (privat flik, Safari på iPhone). Logga in i rutan; går
+  det inte, prova i en vanlig flik eller i Chrome.
 
 ### Bra att veta
 
