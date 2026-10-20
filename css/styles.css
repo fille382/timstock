@@ -707,6 +707,10 @@ input:focus, select:focus, textarea:focus {
 
 .inv-note { margin-top: 14px; font-size: .82rem; white-space: pre-wrap; }
 
+/* Delbetalningsplanen pa fakturan: forfallodag till vanster, belopp till hoger. */
+.inv-plan-row { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0 0; font-variant-numeric: tabular-nums; }
+.inv-plan-row > span + span { white-space: nowrap; }
+
 /* Lagtexter pa fakturan: omvand byggmoms och rotavdrag. Ramen finns for att
    de inte ska drunkna bland ovriga villkor - de ar formkrav. */
 .inv-flag {

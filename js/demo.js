@@ -148,7 +148,11 @@
           hours: 14, fixedTotal: 0, ataTotal: 0, materialTotal: 4200, distance: 0, tripTotal: 0,
           subtotal: 14700, vat: 3675, gross: 18375,
           rotBase: 10500, rotBaseInclVat: 13125, rotPercent: 30, rotDeduction: 3937.5,
-          rotClaimedDate: null, total: 14437.5, notes: '' }
+          rotClaimedDate: null, total: 14437.5, notes: '',
+          /* Delbetalning i två delar - den första har kommit in. */
+          plan: [{ dueDate: iso(8), amount: 7000 }, { dueDate: iso(-8), amount: 7437.5 }],
+          payments: [{ id: 'pay1', date: iso(9), amount: 7000, note: 'Swish',
+            createdAt: stamp(9) }] }
       ],
       expenses: [
         { id: 'x1', date: iso(18), description: 'Drivmedel', gross: 920, vat: 184,
