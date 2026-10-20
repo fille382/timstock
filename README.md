@@ -222,7 +222,8 @@ begärt belopp. Personnumret sparas på kunden men **skrivs aldrig ut på
 fakturan**.
 
 Begär utbetalningen först när kunden betalat sin del — markera fakturan som
-**Betald**, så försvinner varningen. Tryck sedan **Markera som begärd hos
+**Betald** (eller registrera inbetalningarna tills de täcker beloppet), så
+försvinner varningen. Rutan visar också hur mycket kunden betalat. Tryck sedan **Markera som begärd hos
 Skatteverket**. På fakturalistan visar rutan **ROT att söka** hur mycket du
 dragit av men ännu inte bett om.
 
@@ -313,7 +314,9 @@ deklarationen frågar efter, så långt appen kan se dem:
   faktura.
 
 Växeln **Fakturadatum/Betaldatum** ska följa metoden i din momsregistrering
-hos Skatteverket (faktureringsmetoden respektive bokslutsmetoden).
+hos Skatteverket (faktureringsmetoden respektive bokslutsmetoden). På
+betaldatum räknas en delbetald faktura med den andel som betalats in under
+perioden — se *Inbetalningar och delbetalning*.
 
 Redovisningsperioden — **varje månad, varje kvartal eller helår** — ställs in
 under Inställningar och ska spegla momsregistreringen. Den styr både
@@ -592,6 +595,53 @@ långa för cm, korta för mm.
 Allt är dekor: lagret är `aria-hidden`, tar inga klick, och släcks vid utskrift
 så att fakturan blir ren. Rörelsen stängs av för den som valt reducerad
 animation i systeminställningarna.
+
+## Inbetalningar och delbetalning
+
+### Kunden betalade en del
+
+Öppna fakturan och tryck **+ Registrera inbetalning** under **Betalning**:
+datum, belopp och en valfri notering (Swish, bankgiro …). Fakturan märks
+**Delbetald** och visar vad som är kvar — i listan, i fakturan och i rutan
+**Obetalt** överst, som bara räknar resten. Kommer resten in registrerar du
+den på samma sätt, och när inbetalningarna täcker hela beloppet blir fakturan
+**Betald** av sig själv, med betaldatumet för den sista.
+
+Knappen **Betald** fungerar som förut: ett tryck registrerar det som är kvar
+som en inbetalning i dag. Trycker du fel och går tillbaka till Skickad tas
+den inbetalningen bort igen; de du registrerat för hand ligger kvar. Tryck på
+en inbetalning för att ändra datum eller belopp, eller ta bort den.
+
+Skickar du fakturan igen som påminnelse står inbetalt belopp och **Kvar att
+betala** under summan, både på fakturan och i följetexten.
+
+### Delbetalningsplan — innan fakturan skickas
+
+Ska kunden betala i omgångar: tryck **Dela upp i delbetalningar** på fakturan
+innan du skickar den. Välj 2–6 delar, första förfallodag och om resten
+förfaller varje månad eller var 14:e dag, så får du ett förslag med jämna
+belopp i hela kronor (örena hamnar på sista delen). Datum och belopp går att
+ändra fritt — ändrar du en del justeras den sista så att summan stämmer, och
+planen går inte att spara förrän delarna blir fakturans belopp.
+
+På fakturan blir förfallodatumet *Enligt delbetalningsplan*, med en ruta som
+listar varje del och dess sista betaldag. Följetexten i sms:et eller mejlet
+får samma lista. I appen ser du vilka delar som är betalda, och fakturan
+märks **Förfallen** så fort en del passerat sitt datum utan att ha betalats.
+Inbetalningarna fördelas på delarna i tur och ordning.
+
+Har kunden redan betalat något när planen görs blir det betalda första
+delen, och resten delas upp. **Ta bort planen** ger fakturan tillbaka sitt
+vanliga förfallodatum.
+
+### Moms och ROT vid delbetalning
+
+- **Momsunderlag på betaldatum** (bokslutsmetoden): varje inbetalning räknas
+  till perioden då pengarna kom in, med sin andel av fakturans försäljning
+  och moms. En faktura som betalats till hälften i september ger alltså halva
+  momsen i september. På fakturadatum påverkas ingenting.
+- **ROT-underlaget** visar hur mycket kunden betalat, och appen säger till
+  att vänta med begäran hos Skatteverket tills hela kundens del är betald.
 
 ## Skicka fakturan med sms eller mejl
 

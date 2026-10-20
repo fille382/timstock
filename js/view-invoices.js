@@ -33,9 +33,8 @@
       + unbilledTrips.reduce(function (s, t) { return s + S.billableTrip(t); }, 0)
       + openFixed.reduce(function (s, p) { return s + S.fixedPriceOf(p); }, 0);
 
-    var outstanding = list
-      .filter(function (i) { return i.status !== 'betald'; })
-      .reduce(function (s, i) { return s + Number(i.total || 0); }, 0);
+    /* Det som faktiskt ar kvar - en delbetald faktura raknas med resten. */
+    var outstanding = list.reduce(function (s, i) { return s + S.invoiceBalance(i); }, 0);
 
     var html = '<button class="btn btn-primary btn-block" data-new-invoice style="margin-bottom:16px">'
       + '+ Ny faktura</button>';
@@ -313,7 +312,8 @@
 
     html += '<p class="small muted" style="margin:8px 0 12px">'
       + (vatBasis === 'betald'
-        ? 'Räknat på betaldatum (bokslutsmetoden/kontantmetoden).'
+        ? 'Räknat på betaldatum (bokslutsmetoden/kontantmetoden). En delbetalning räknas '
+          + 'till perioden då pengarna kom in, med sin andel av fakturans moms.'
         : 'Räknat på fakturadatum (faktureringsmetoden).')
       + ' Vilken metod som gäller dig står i momsregistreringen hos Skatteverket. Underlaget '
       + 'ersätter inte bokföringen — det räknar bara det du lagt in i appen, och kvittona '
@@ -352,10 +352,16 @@
     var co = S.company();
     var r = S.vatReport(range.from, range.to, basis);
 
-    var invs = S.invoices().filter(function (inv) {
-      var d = basis === 'betald' ? inv.paidDate : inv.issueDate;
-      return d && d >= range.from && d <= range.to;
-    });
+    /* Pa betaldatum kan en faktura ligga med till en del - den andel som
+       betalades in under perioden. */
+    var invs = S.invoices().map(function (inv) {
+      if (basis !== 'betald') {
+        var d = inv.issueDate;
+        return d && d >= range.from && d <= range.to ? { inv: inv, share: 1, date: d } : null;
+      }
+      var p = S.paidShareIn(inv, range.from, range.to);
+      return p.share ? { inv: inv, share: p.share, date: p.date } : null;
+    }).filter(Boolean);
     var mats = S.materials({ from: range.from, to: range.to })
       .filter(function (m) { return S.materialPurchaseVat(m) > 0; });
     var xs = S.expenses({ from: range.from, to: range.to });
@@ -400,14 +406,17 @@
 
     html += table('Fakturor i perioden (utgående moms)',
       '<th>Nr</th><th>Datum</th><th>Kund</th><th class="num">Exkl. moms</th><th class="num">Moms</th>',
-      invs.map(function (inv) {
-        var d = basis === 'betald' ? inv.paidDate : inv.issueDate;
+      invs.map(function (x) {
+        var inv = x.inv;
+        var part = x.share < 0.9999;
         return '<tr><td>' + U.esc(inv.number) + '</td>'
-          + '<td class="nowrap">' + U.esc(d) + '</td>'
+          + '<td class="nowrap">' + U.esc(x.date) + '</td>'
           + '<td class="desc">' + U.esc(inv.clientSnapshot ? inv.clientSnapshot.name : '')
-          + (inv.billingMode === 'reverse' ? ' (omvänd byggmoms)' : '') + '</td>'
-          + '<td class="num">' + U.money(inv.subtotal) + '</td>'
-          + '<td class="num">' + U.money(inv.billingMode === 'reverse' ? 0 : inv.vat) + '</td></tr>';
+          + (inv.billingMode === 'reverse' ? ' (omvänd byggmoms)' : '')
+          + (part ? ' (delbetalning, ' + Math.round(x.share * 100) + ' %)' : '') + '</td>'
+          + '<td class="num">' + U.money(Number(inv.subtotal || 0) * x.share) + '</td>'
+          + '<td class="num">' + U.money(inv.billingMode === 'reverse'
+            ? 0 : Number(inv.vat || 0) * x.share) + '</td></tr>';
       }));
 
     html += table('Materialinköp (ingående moms)',
@@ -548,8 +557,11 @@
   }
 
   function invoiceItem(inv) {
-    var st = STATUS[inv.status] || STATUS.utkast;
-    var overdue = inv.status !== 'betald' && inv.dueDate && inv.dueDate < S.todayISO();
+    var st = statusOf(inv);
+    var overdue = S.invoiceOverdue(inv);
+    var paid = S.invoicePaid(inv);
+    var rest = S.invoiceBalance(inv);
+    var plan = inv.plan && inv.plan.length;
     return '<button class="item" type="button" data-invoice="' + U.esc(inv.id) + '">'
       + '<div class="item-top">'
       + '<span class="item-title">' + U.esc(inv.number) + ' · '
@@ -561,8 +573,22 @@
       + '<span class="dot">•</span>'
       + '<span class="badge ' + st.cls + '">' + st.label + '</span>'
       + (overdue ? '<span class="badge badge-danger">Förfallen</span>' : '')
-      + '<span class="dot">•</span><span>' + (inv.lines ? inv.lines.length : 0) + ' rader</span>'
-      + '</div></button>';
+      + '<span class="dot">•</span><span>'
+      + (paid && rest
+        ? U.money0(rest) + ' kvar'
+        : plan && rest
+          ? inv.plan.length + ' delbetalningar'
+          : (inv.lines ? inv.lines.length : 0) + ' rader')
+      + '</span></div></button>';
+  }
+
+  /* Delbetald ar ingen egen status - det ar en skickad faktura dar en del
+     av beloppet kommit in. */
+  function statusOf(inv) {
+    if (inv.status !== 'betald' && S.invoicePaid(inv) > 0) {
+      return { label: 'Delbetald', cls: 'badge-accent' };
+    }
+    return STATUS[inv.status] || STATUS.utkast;
   }
 
   /* Varnar en momsbefriad firma nar arets fakturering narmar sig taket.
@@ -1167,7 +1193,7 @@
   function openInvoice(id) {
     var inv = S.invoice(id);
     if (!inv) return;
-    var st = STATUS[inv.status] || STATUS.utkast;
+    var st = statusOf(inv);
 
     var html = '<div class="btn-row" style="margin-bottom:14px">'
       + '<button class="btn btn-primary" data-share>Skicka (sms/mejl)</button>'
@@ -1186,7 +1212,7 @@
       + '<div class="totals-row"><span class="muted">Fakturadatum</span><span>'
       + U.esc(inv.issueDate) + '</span></div>'
       + '<div class="totals-row"><span class="muted">Förfallodatum</span><span>'
-      + U.esc(inv.dueDate || '–') + '</span></div>'
+      + (hasPlan(inv) ? 'enligt delbetalningsplan' : U.esc(inv.dueDate || '–')) + '</span></div>'
       + (inv.fixedTotal
         ? '<div class="totals-row"><span class="muted">Fast pris</span><span>'
           + U.money(inv.fixedTotal) + '</span></div>'
@@ -1214,6 +1240,7 @@
       + '<div class="totals-row grand"><span>Att betala</span><span>' + U.money(inv.total) + '</span></div>'
       + '</div>';
 
+    html += paymentHTML(inv);
     html += rotClaimHTML(inv);
 
     html += '<div class="section-title">Förhandsvisning</div>';
@@ -1238,18 +1265,403 @@
         }
         var st2 = ev.target.closest('[data-status]');
         if (st2) {
-          S.setInvoiceStatus(inv.id, st2.getAttribute('data-status'));
+          if (!S.setInvoiceStatus(inv.id, st2.getAttribute('data-status'))) {
+            U.toast('Inbetalningarna täcker hela fakturan — ta bort en inbetalning först', true);
+            return;
+          }
           U.toast('Status uppdaterad');
           openInvoice(inv.id);
           render(container);
           return;
         }
+        if (ev.target.closest('[data-new-payment]')) { openPayment(inv.id, null); return; }
+        var pay = ev.target.closest('[data-payment]');
+        if (pay) { openPayment(inv.id, pay.getAttribute('data-payment')); return; }
+        if (ev.target.closest('[data-plan]')) { openPlan(inv.id); return; }
         if (ev.target.closest('[data-delete-invoice]')) {
           if (!confirm('Ta bort faktura ' + inv.number + '? Posterna blir ofakturerade igen.')) return;
           S.deleteInvoice(inv.id);
           U.closeSheet();
           U.toast('Faktura borttagen');
           render(container);
+        }
+      });
+    });
+  }
+
+  /* ---------- Inbetalningar och delbetalningsplan ----------
+
+     Kunden kan betala i omgangar - antingen for att ni kommit overens om det
+     innan fakturan gick ivag (delbetalningsplanen, som skrivs ut pa
+     fakturan), eller for att halva beloppet bara dok upp pa kontot. Varje
+     inbetalning registreras for sig, och fakturan blir Betald av sig sjalv
+     nar de tacker hela beloppet. */
+
+  function hasPlan(inv) { return !!(inv.plan && inv.plan.length); }
+
+  function decStr(n) { return String(U.round2(n)).replace('.', ','); }
+
+  /* Samma dag N manader senare - den 31:a blir sista dagen i kortare manader. */
+  function addMonths(iso, n) {
+    var d = U.parseISO(iso);
+    if (!d) return iso;
+    var t = new Date(d.getFullYear(), d.getMonth() + n, 1);
+    var last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+    t.setDate(Math.min(d.getDate(), last));
+    return U.toISO(t);
+  }
+
+  function paymentHTML(inv) {
+    var list = S.invoicePayments(inv);
+    var paid = S.invoicePaid(inv);
+    var rest = S.invoiceBalance(inv);
+    var plan = S.planStatus(inv);
+
+    var html = '<div class="section-title">Betalning</div>';
+
+    if (plan.length) {
+      html += '<div class="totals">'
+        + plan.map(function (d) {
+          var state = d.done ? ' <span class="badge badge-ok">Betald</span>'
+            : d.overdue ? ' <span class="badge badge-danger">Förfallen</span>'
+            : d.paid ? ' <span class="badge badge-accent">' + U.money0(d.rest) + ' kvar</span>'
+            : '';
+          return '<div class="totals-row"><span class="muted">' + d.n + '. Senast '
+            + U.esc(d.dueDate) + state + '</span><span>' + U.money(d.amount) + '</span></div>';
+        }).join('')
+        + '</div>';
+    }
+
+    if (list.length) {
+      html += '<div class="list" style="margin-bottom:10px">' + list.map(function (p) {
+        return '<button class="item" type="button" data-payment="' + U.esc(p.id) + '">'
+          + '<div class="item-top"><span class="item-title">Inbetalt '
+          + U.esc(U.dateShort(p.date)) + '</span>'
+          + '<span class="item-amount">' + U.money(p.amount) + '</span></div>'
+          + (p.note ? '<div class="item-sub"><span>' + U.esc(p.note) + '</span></div>' : '')
+          + '</button>';
+      }).join('') + '</div>';
+    }
+
+    if (paid && rest) {
+      html += '<div class="totals">'
+        + row('Inbetalt', U.money(paid))
+        + '<div class="totals-row grand"><span>Kvar att betala</span><span>'
+        + U.money(rest) + '</span></div>'
+        + '</div>';
+    }
+
+    if (!rest) return list.length || plan.length ? html : '';
+
+    if (!list.length && !plan.length) {
+      html += '<p class="small muted" style="margin:0 0 10px">Har kunden betalat en del? '
+        + 'Registrera inbetalningen, så räknas bara resten som obetalt. Ska fakturan betalas '
+        + 'i omgångar: dela upp den innan du skickar den — planen skrivs ut på fakturan.</p>';
+    }
+
+    html += '<div class="btn-row" style="margin-bottom:6px">'
+      + '<button class="btn" data-new-payment>+ Registrera inbetalning</button>'
+      + '<button class="btn" data-plan>'
+      + (plan.length ? 'Ändra delbetalningsplan' : 'Dela upp i delbetalningar') + '</button>'
+      + '</div>';
+
+    return html;
+  }
+
+  function openPayment(invId, paymentId) {
+    var inv = S.invoice(invId);
+    if (!inv) return;
+    var p = paymentId
+      ? S.invoicePayments(inv).find(function (x) { return x.id === paymentId; }) || null
+      : null;
+    var rest = S.invoiceBalance(inv);
+    var paid = S.invoicePaid(inv);
+    /* Forslaget for en ny inbetalning: nasta delbetalning, annars resten. */
+    var next = S.planStatus(inv).find(function (d) { return !d.done; }) || null;
+    var amount = p ? p.amount : (next ? next.rest : rest);
+
+    var html = '<div class="row">'
+      + '<div class="field"><label for="pay-date">Datum</label>'
+      + '<input type="date" id="pay-date" value="' + U.esc(p ? p.date : S.todayISO()) + '"></div>'
+      + '<div class="field"><label for="pay-amount">Belopp (kr)</label>'
+      + '<input type="text" id="pay-amount" inputmode="decimal" autocomplete="off" placeholder="0"'
+      + ' value="' + U.esc(decStr(amount)) + '"></div>'
+      + '</div>';
+
+    if (!p) {
+      html += '<div class="quick" style="margin:-6px 0 12px">'
+        + (next ? '<button type="button" data-pay-fill="' + next.rest + '">Delbetalning '
+          + next.n + '</button>' : '')
+        + '<button type="button" data-pay-fill="' + rest + '">Hela resten</button>'
+        + (!next && !paid ? '<button type="button" data-pay-fill="'
+          + U.round2(Number(inv.total || 0) / 2) + '">Hälften</button>' : '')
+        + '</div>';
+    }
+
+    html += '<div class="field"><label for="pay-note">Notering</label>'
+      + '<input type="text" id="pay-note" placeholder="t.ex. Swish, bankgiro"'
+      + ' value="' + U.esc(p ? p.note : '') + '"></div>';
+
+    html += '<p class="small muted" style="margin:-4px 0 12px">Kvar att betala före den här '
+      + 'inbetalningen: ' + U.money(p ? U.round2(rest + Number(p.amount || 0)) : rest)
+      + '. Fakturan blir <i>Betald</i> av sig själv när inbetalningarna täcker hela beloppet.</p>';
+
+    html += '<button class="btn btn-primary btn-block" data-save-payment>'
+      + (p ? 'Spara inbetalning' : 'Registrera inbetalning') + '</button>';
+
+    if (p) {
+      html += '<button class="btn btn-danger btn-block" data-delete-payment style="margin-top:10px">'
+        + 'Ta bort inbetalning</button>';
+    }
+
+    html += '<button class="btn btn-ghost btn-block" data-back style="margin-top:14px">'
+      + '← Tillbaka till fakturan</button>';
+
+    U.openSheet((p ? 'Inbetalning' : 'Ny inbetalning') + ' · faktura ' + inv.number, html, function (body) {
+      body.addEventListener('click', function (ev) {
+        var fill = ev.target.closest('[data-pay-fill]');
+        if (fill) {
+          body.querySelector('#pay-amount').value = decStr(Number(fill.getAttribute('data-pay-fill')));
+          return;
+        }
+        if (ev.target.closest('[data-back]')) { openInvoice(inv.id); return; }
+        if (ev.target.closest('[data-save-payment]')) {
+          var date = body.querySelector('#pay-date').value;
+          var amt = U.parseHours(body.querySelector('#pay-amount').value);
+          if (!date) { U.toast('Välj datum', true); return; }
+          if (!isFinite(amt) || amt <= 0) { U.toast('Ange beloppet', true); return; }
+
+          /* Oresavrundning ar normalt - en hel krona over ar det inte. */
+          var room = p ? U.round2(rest + Number(p.amount || 0)) : rest;
+          var over = U.round2(amt - room);
+          if (over >= 1 && !confirm('Beloppet är ' + U.money(over) + ' mer än det som är kvar ('
+            + U.money(room) + '). Registrera ändå?')) return;
+
+          S.savePayment(inv.id, {
+            id: p ? p.id : null,
+            date: date,
+            amount: amt,
+            note: body.querySelector('#pay-note').value.trim()
+          });
+          var after = S.invoice(inv.id);
+          U.toast(after.status === 'betald'
+            ? 'Faktura ' + after.number + ' är betald'
+            : 'Inbetalning sparad · ' + U.money(S.invoiceBalance(after)) + ' kvar');
+          render(container);
+          openInvoice(inv.id);
+          return;
+        }
+        if (ev.target.closest('[data-delete-payment]')) {
+          if (!confirm('Ta bort inbetalningen på ' + U.money(p.amount) + '?')) return;
+          S.deletePayment(inv.id, p.id);
+          U.toast('Inbetalning borttagen');
+          render(container);
+          openInvoice(inv.id);
+        }
+      });
+    });
+  }
+
+  /* Delbetalningsplanen: antal delar och forsta forfallodag ger ett forslag
+     med jamna belopp i hela kronor (oret hamnar pa sista delen). Beloppen
+     och datumen gar sedan att andra fritt - andras en del justeras sista
+     delen sa att summan fortsatter att stamma. */
+  function openPlan(invId) {
+    var inv = S.invoice(invId);
+    if (!inv) return;
+    var total = Number(inv.total || 0);
+    var paid = S.invoicePaid(inv);
+    var payments = S.invoicePayments(inv);
+    var today = S.todayISO();
+    var existing = hasPlan(inv);
+    var firstOpen = S.planStatus(inv).find(function (d) { return !d.done; });
+
+    var state = {
+      count: existing ? inv.plan.length : 2,
+      step: 'month',
+      first: firstOpen ? firstOpen.dueDate
+        : (inv.dueDate && inv.dueDate >= today ? inv.dueDate
+          : U.addDays(today, Number(S.settings().paymentTermsDays) || 30)),
+      rows: existing ? inv.plan.map(function (d) {
+        return { dueDate: d.dueDate, amount: Number(d.amount) };
+      }) : []
+    };
+
+    /* Det kunden redan betalat blir forsta delen, med sista betaldagen -
+       resten delas upp. */
+    function generate() {
+      var rows = [];
+      var base = total;
+      if (paid > 0) {
+        rows.push({ dueDate: payments.length ? payments[payments.length - 1].date : today, amount: paid });
+        base = U.round2(total - paid);
+      }
+      var each = Math.floor(base / state.count);
+      for (var i = 0; i < state.count; i++) {
+        rows.push({
+          dueDate: state.step === 'month' ? addMonths(state.first, i) : U.addDays(state.first, 14 * i),
+          amount: i === state.count - 1 ? U.round2(base - each * (state.count - 1)) : each
+        });
+      }
+      state.rows = rows;
+    }
+
+    if (!existing) generate();
+
+    function rowsHTML() {
+      return state.rows.map(function (r, i) {
+        return '<div class="field" style="margin-bottom:10px"><label>Del ' + (i + 1) + '</label>'
+          + '<div class="row">'
+          + '<input type="date" data-row-date="' + i + '" value="' + U.esc(r.dueDate) + '"'
+          + ' aria-label="Förfallodatum del ' + (i + 1) + '">'
+          + '<input type="text" data-row-amount="' + i + '" inputmode="decimal" autocomplete="off"'
+          + ' value="' + U.esc(decStr(r.amount)) + '" aria-label="Belopp del ' + (i + 1) + '">'
+          + '</div></div>';
+      }).join('');
+    }
+
+    function sumOf(rows) {
+      return U.round2(rows.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0));
+    }
+
+    function sumHTML() {
+      var diff = U.round2(total - sumOf(state.rows));
+      if (Math.abs(diff) < 0.01) {
+        return '<span class="ok-text">Summan stämmer: ' + U.money(total) + '</span>';
+      }
+      return '<span class="warn-text">' + (diff > 0
+        ? U.money(diff) + ' kvar att fördela'
+        : U.money(-diff) + ' för mycket') + '</span> — fakturan är på ' + U.money(total);
+    }
+
+    var countBtns = [2, 3, 4, 5, 6].map(function (n) {
+      return '<button type="button" data-plan-count="' + n + '" aria-pressed="'
+        + (!existing && n === state.count) + '">' + n + '</button>';
+    }).join('');
+
+    var html = '<p class="small muted" style="margin:0 0 12px">Faktura ' + U.esc(inv.number)
+      + ' på ' + U.money(total) + '. Planen skrivs ut på fakturan och i följetexten, och appen '
+      + 'säger till när en delbetalning har förfallit.</p>';
+
+    if (inv.status !== 'utkast') {
+      html += note('warn', 'Fakturan är redan skickad',
+        'Skicka den igen när planen är klar, så att kunden får delbetalningarna på fakturan.');
+    }
+
+    html += '<div class="field" style="margin-top:12px"><label>'
+      + (paid > 0 ? 'Dela upp resten i' : 'Antal delbetalningar') + '</label>'
+      + '<div class="seg">' + countBtns + '</div></div>';
+
+    html += '<div class="field"><label for="plan-first">Första förfallodag</label>'
+      + '<input type="date" id="plan-first" value="' + U.esc(state.first) + '"></div>';
+
+    html += '<div class="field"><label>Därefter</label><div class="seg">'
+      + '<button type="button" data-plan-step="month" aria-pressed="true">Varje månad</button>'
+      + '<button type="button" data-plan-step="2w" aria-pressed="false">Var 14:e dag</button>'
+      + '</div></div>';
+
+    if (paid > 0) {
+      html += '<p class="small muted" style="margin:-4px 0 12px">Det som redan betalats ('
+        + U.money(paid) + ') blir första delen.</p>';
+    }
+
+    html += '<div id="plan-rows">' + rowsHTML() + '</div>';
+    html += '<p class="small" id="plan-sum" style="margin:0 0 14px">' + sumHTML() + '</p>';
+
+    html += '<button class="btn btn-primary btn-block" data-save-plan>Spara delbetalningsplan</button>';
+    if (existing) {
+      html += '<button class="btn btn-danger btn-block" data-remove-plan style="margin-top:10px">'
+        + 'Ta bort planen</button>';
+    }
+    html += '<button class="btn btn-ghost btn-block" data-back style="margin-top:14px">'
+      + '← Tillbaka till fakturan</button>';
+
+    U.openSheet('Delbetalning · faktura ' + inv.number, html, function (body) {
+      function redraw() {
+        body.querySelector('#plan-rows').innerHTML = rowsHTML();
+        body.querySelector('#plan-sum').innerHTML = sumHTML();
+      }
+
+      function press(attr, value) {
+        body.querySelectorAll('[' + attr + ']').forEach(function (b) {
+          b.setAttribute('aria-pressed', String(b.getAttribute(attr) === value));
+        });
+      }
+
+      body.addEventListener('input', function (ev) {
+        var a = ev.target.getAttribute('data-row-amount');
+        if (a === null) return;
+        var i = Number(a);
+        var v = U.parseHours(ev.target.value);
+        state.rows[i].amount = isFinite(v) ? v : 0;
+        /* Sista delen tar upp skillnaden, sa att summan haller sig. */
+        var last = state.rows.length - 1;
+        if (i < last) {
+          var others = sumOf(state.rows.filter(function (r, k) { return k !== last; }));
+          var fill = U.round2(total - others);
+          if (fill >= 0) {
+            state.rows[last].amount = fill;
+            body.querySelector('[data-row-amount="' + last + '"]').value = decStr(fill);
+          }
+        }
+        body.querySelector('#plan-sum').innerHTML = sumHTML();
+      });
+
+      body.addEventListener('change', function (ev) {
+        var d = ev.target.getAttribute('data-row-date');
+        if (d !== null) { state.rows[Number(d)].dueDate = ev.target.value; return; }
+        if (ev.target.id === 'plan-first' && ev.target.value) {
+          state.first = ev.target.value;
+          generate();
+          redraw();
+        }
+      });
+
+      body.addEventListener('click', function (ev) {
+        var c = ev.target.closest('[data-plan-count]');
+        if (c) {
+          state.count = Number(c.getAttribute('data-plan-count'));
+          press('data-plan-count', String(state.count));
+          generate();
+          redraw();
+          return;
+        }
+        var st = ev.target.closest('[data-plan-step]');
+        if (st) {
+          state.step = st.getAttribute('data-plan-step');
+          press('data-plan-step', state.step);
+          generate();
+          redraw();
+          return;
+        }
+        if (ev.target.closest('[data-back]')) { openInvoice(inv.id); return; }
+        if (ev.target.closest('[data-save-plan]')) {
+          if (state.rows.some(function (r) { return !r.dueDate; })) {
+            U.toast('Varje del behöver ett förfallodatum', true);
+            return;
+          }
+          if (state.rows.some(function (r) { return !(Number(r.amount) > 0); })) {
+            U.toast('Varje del behöver ett belopp', true);
+            return;
+          }
+          if (Math.abs(U.round2(total - sumOf(state.rows))) >= 0.01) {
+            U.toast('Delarna blir ' + U.money(sumOf(state.rows)) + ' — fakturan är på '
+              + U.money(total), true);
+            return;
+          }
+          S.setInvoicePlan(inv.id, state.rows);
+          U.toast('Delbetalningsplan sparad');
+          render(container);
+          openInvoice(inv.id);
+          return;
+        }
+        if (ev.target.closest('[data-remove-plan]')) {
+          if (!confirm('Ta bort delbetalningsplanen? Fakturan får tillbaka förfallodatumet '
+            + (inv.dueDate || '–') + '.')) return;
+          S.setInvoicePlan(inv.id, null);
+          U.toast('Planen borttagen');
+          render(container);
+          openInvoice(inv.id);
         }
       });
     });
@@ -1265,6 +1677,7 @@
     var cl = inv.clientSnapshot || {};
     var claimed = !!inv.rotClaimedDate;
     var paid = inv.status === 'betald';
+    var paidAmount = S.invoicePaid(inv);
 
     var html = '<div class="section-title">ROT-underlag</div>';
 
@@ -1275,7 +1688,8 @@
       + (cl.rotApartment ? row('Lägenhetsnummer', U.esc(cl.rotApartment)) : '')
       + row('Fakturanummer', U.esc(inv.number))
       + row('Arbetskostnad inkl. moms', U.money(inv.rotBaseInclVat))
-      + row('Betaldatum', U.esc(inv.paidDate || '– inte betald'))
+      + row('Betalt av kunden', U.money(paidAmount))
+      + row('Betaldatum', U.esc(inv.paidDate || (paidAmount ? '– delbetald' : '– inte betald')))
       + '<div class="totals-row grand"><span>Begärt belopp</span><span>' + U.money(rot) + '</span></div>'
       + '</div>';
 
@@ -1289,8 +1703,10 @@
       html += note('ok', 'Begärd ' + U.esc(inv.rotClaimedDate),
         'Utbetalningen är begärd hos Skatteverket.');
     } else if (!paid) {
-      html += note('warn', 'Vänta med begäran',
-        'Begär utbetalningen först när kunden betalat sin del av fakturan.');
+      html += note('warn', 'Vänta med begäran', paidAmount
+        ? 'Kunden har betalat ' + U.money(paidAmount) + ' av ' + U.money(inv.total)
+          + '. Begär utbetalningen när hela kundens del är betald.'
+        : 'Begär utbetalningen först när kunden betalat sin del av fakturan.');
     }
 
     html += '<button class="btn btn-block" data-rot-claim style="margin-top:10px">'
@@ -1342,7 +1758,8 @@
       + '<div class="inv-meta">'
       + '<div><b>Fakturanummer</b> ' + U.esc(inv.number) + '</div>'
       + '<div><b>Fakturadatum</b> ' + U.esc(inv.issueDate) + '</div>'
-      + '<div><b>Förfallodatum</b> ' + U.esc(inv.dueDate || '–') + '</div>'
+      + '<div><b>Förfallodatum</b> '
+      + (hasPlan(inv) ? 'Enligt delbetalningsplan' : U.esc(inv.dueDate || '–')) + '</div>'
       + '<div><b>Att betala</b> ' + U.money(inv.total) + '</div>'
       + '</div></div>';
 
@@ -1366,6 +1783,10 @@
       : Number(inv.gross);
     var rot = Number(inv.rotDeduction || 0);
     var exempt = !!co.vatExempt;
+    /* Delbetald: skickas fakturan igen som paminnelse ser kunden vad som
+       kommit in och vad som ar kvar. */
+    var paid = S.invoicePaid(inv);
+    var rest = S.invoiceBalance(inv);
 
     html += '<div class="inv-sum">'
       + '<div class="inv-sum-row"><span>' + (exempt ? 'Summa' : 'Summa exkl. moms')
@@ -1383,7 +1804,22 @@
           + U.money(rot) + '</span></div>'
         : '')
       + '<div class="inv-sum-row total"><span>Att betala</span><span>' + U.money(inv.total) + '</span></div>'
+      + (paid && rest
+        ? '<div class="inv-sum-row"><span>Inbetalt</span><span>−' + U.money(paid) + '</span></div>'
+          + '<div class="inv-sum-row total"><span>Kvar att betala</span><span>'
+          + U.money(rest) + '</span></div>'
+        : '')
       + '</div>';
+
+    if (hasPlan(inv)) {
+      html += '<div class="inv-flag"><b>Delbetalning</b><br>'
+        + 'Fakturan betalas i ' + inv.plan.length + ' delar:'
+        + inv.plan.map(function (d, i) {
+          return '<div class="inv-plan-row"><span>' + (i + 1) + '. Senast ' + U.esc(d.dueDate)
+            + '</span><span>' + U.money(d.amount) + '</span></div>';
+        }).join('')
+        + '</div>';
+    }
 
     if (exempt) {
       html += '<div class="inv-flag"><b>Ingen moms debiteras.</b><br>'
@@ -1414,7 +1850,9 @@
       + (co.bic ? 'BIC ' + U.esc(co.bic) + '<br>' : '')
       + 'Ange fakturanummer ' + U.esc(inv.number) + ' som referens.</div>'
       + '<div><b>Villkor</b><br>'
-      + 'Betalningsvillkor: ' + daysBetween(inv.issueDate, inv.dueDate) + ' dagar<br>'
+      + 'Betalningsvillkor: ' + (hasPlan(inv)
+        ? 'delbetalning enligt planen ovan'
+        : daysBetween(inv.issueDate, inv.dueDate) + ' dagar') + '<br>'
       + 'Dröjsmålsränta enligt räntelagen.'
       + (co.fskatt ? '<br>Innehar F-skattsedel.' : '')
       + '</div>'
@@ -1446,15 +1884,25 @@
   function invoiceMessage(inv) {
     var cl = inv.clientSnapshot || {};
     var co = inv.companySnapshot || {};
+    var paid = S.invoicePaid(inv);
+    var rest = S.invoiceBalance(inv);
     return 'Hej' + (cl.contact ? ' ' + cl.contact : '') + ',\n\n'
       + 'Här kommer faktura ' + inv.number + '.\n\n'
       + 'Fakturadatum: ' + inv.issueDate + '\n'
-      + 'Förfallodatum: ' + (inv.dueDate || '-') + '\n'
+      + (hasPlan(inv) ? '' : 'Förfallodatum: ' + (inv.dueDate || '-') + '\n')
       + (Number(inv.rotDeduction || 0)
         ? 'ROT-avdrag: -' + U.money(inv.rotDeduction) + ' (redan avdraget nedan)\n' : '')
       + (inv.billingMode === 'reverse'
         ? 'Omvänd betalningsskyldighet för mervärdesskatt gäller.\n' : '')
-      + 'Att betala: ' + U.money(inv.total) + '\n\n'
+      + 'Att betala: ' + U.money(inv.total) + '\n'
+      + (paid && rest
+        ? 'Inbetalt hittills: ' + U.money(paid) + '\nKvar att betala: ' + U.money(rest) + '\n' : '')
+      + (hasPlan(inv)
+        ? '\nDelbetalning:\n' + inv.plan.map(function (d, i) {
+          return (i + 1) + '. ' + U.money(d.amount) + ' senast ' + d.dueDate;
+        }).join('\n') + '\n'
+        : '')
+      + '\n'
       + (co.bankgiro ? 'Bankgiro: ' + co.bankgiro + '\n' : '')
       + (co.swish ? 'Swish: ' + co.swish + '\n' : '')
       + '\nMed vänlig hälsning\n' + (co.name || '');

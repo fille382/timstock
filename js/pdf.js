@@ -222,7 +222,7 @@
   }
 
   function invoiceBlob(inv) {
-    var U = global.UI;
+    var U = global.UI, S = global.Store;
     var co = inv.companySnapshot || {};
     var cl = inv.clientSnapshot || {};
     var detailed = inv.mode !== 'grouped';
@@ -231,6 +231,9 @@
     var gross = inv.gross === undefined || inv.gross === null
       ? U.round2(Number(inv.subtotal || 0) + Number(inv.vat || 0))
       : Number(inv.gross);
+    var plan = inv.plan && inv.plan.length ? inv.plan : null;
+    var paid = S.invoicePaid(inv);
+    var rest = S.invoiceBalance(inv);
 
     var d = new Doc();
     var y = 0; // baslinje-/blockmarkor, uppifran
@@ -256,7 +259,7 @@
     var metaY = 60;
     [['Fakturanummer', String(inv.number)],
      ['Fakturadatum', inv.issueDate || '–'],
-     ['Förfallodatum', inv.dueDate || '–'],
+     ['Förfallodatum', plan ? 'Enligt delbetalningsplan' : (inv.dueDate || '–')],
      ['Att betala', U.money(inv.total)]].forEach(function (row, i, arr) {
       d.text(RX - 190, metaY, row[0], { size: 9, bold: true });
       d.text(RX, metaY, row[1], { size: 9, bold: i === arr.length - 1, align: 'right' });
@@ -342,7 +345,7 @@
       sums.push(['ROT-avdrag ' + inv.rotPercent + ' %', '−' + U.money(inv.rotDeduction)]);
     }
 
-    need(sums.length * 15 + 46);
+    need(sums.length * 15 + 46 + (paid && rest ? 40 : 0));
     var sumLX = RX - 230;
     sums.forEach(function (row) {
       y += 15;
@@ -354,6 +357,18 @@
     y += 15;
     d.text(sumLX, y, 'Att betala', { size: 11, bold: true });
     d.text(RX, y, U.money(inv.total), { size: 11, bold: true, align: 'right' });
+
+    /* Delbetald: skickas fakturan igen ser kunden vad som ar kvar. */
+    if (paid && rest) {
+      y += 17;
+      d.text(sumLX, y, 'Inbetalt', { size: 9.5, color: Doc.MUTED });
+      d.text(RX, y, '−' + U.money(paid), { size: 9.5, align: 'right' });
+      y += 8;
+      d.line(sumLX, y, RX, y, 0.9, Doc.MUTED);
+      y += 15;
+      d.text(sumLX, y, 'Kvar att betala', { size: 11, bold: true });
+      d.text(RX, y, U.money(rest), { size: 11, bold: true, align: 'right' });
+    }
     y += 6;
 
     /* -- Upplysningsrutor: moms, omvand byggmoms, ROT och meddelande -- */
@@ -376,6 +391,25 @@
         d.text(L + 10, by, ln, { size: 8.5 });
       });
       y += h;
+    }
+
+    /* Delbetalningsplanen: en ruta som de andra, men med beloppen
+       hogerstallda som en tabell. */
+    if (plan) {
+      var ph = 9 + 13 + 11.5 + plan.length * 13 + 6;
+      y += 10;
+      need(ph + 4);
+      d.rect(L, y, BODY_W, ph, Doc.LIGHT);
+      var py = y + 16;
+      d.text(L + 10, py, 'Delbetalning', { size: 8.5, bold: true });
+      py += 6 + 11.5;
+      d.text(L + 10, py, 'Fakturan betalas i ' + plan.length + ' delar:', { size: 8.5 });
+      plan.forEach(function (p, i) {
+        py += 13;
+        d.text(L + 10, py, (i + 1) + '. Senast ' + p.dueDate, { size: 8.5 });
+        d.text(RX - 10, py, U.money(p.amount), { size: 8.5, align: 'right' });
+      });
+      y += ph;
     }
 
     if (exempt) {
@@ -411,7 +445,9 @@
     ];
     var terms = [
       { t: 'Villkor', bold: true },
-      { t: 'Betalningsvillkor: ' + daysBetween(inv.issueDate, inv.dueDate) + ' dagar' },
+      { t: 'Betalningsvillkor: ' + (plan
+        ? 'delbetalning enligt plan'
+        : daysBetween(inv.issueDate, inv.dueDate) + ' dagar') },
       { t: 'Dröjsmålsränta enligt räntelagen.' },
       { t: co.fskatt ? 'Innehar F-skattsedel.' : '' }
     ];

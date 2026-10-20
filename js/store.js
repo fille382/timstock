@@ -782,14 +782,21 @@
     };
 
     data.invoices.forEach(function (inv) {
-      var d = basis === 'betald' ? inv.paidDate : inv.issueDate;
-      if (!inRange(d)) return;
+      /* Pa betaldatum hor varje inbetalning till sin period - en faktura som
+         betalats till halften ger halva forsaljningen och halva momsen. */
+      var share = 1;
+      if (basis === 'betald') {
+        share = paidShareIn(inv, from, to).share;
+        if (!share) return;
+      } else if (!inRange(inv.issueDate)) {
+        return;
+      }
       out.invoiceCount++;
       if (inv.billingMode === 'reverse') {
-        out.salesReverse += Number(inv.subtotal || 0);
+        out.salesReverse += Number(inv.subtotal || 0) * share;
       } else {
-        out.salesNormal += Number(inv.subtotal || 0);
-        out.vatOut += Number(inv.vat || 0);
+        out.salesNormal += Number(inv.subtotal || 0) * share;
+        out.vatOut += Number(inv.vat || 0) * share;
       }
     });
 
@@ -925,12 +932,191 @@
     save();
   }
 
+  /* Returnerar false om bytet inte gick: en faktura som ar fullt inbetald
+     kan inte bli obetald forran en inbetalning tagits bort. */
   function setInvoiceStatus(id, status) {
     var inv = invoice(id);
-    if (!inv) return;
+    if (!inv) return false;
+    var list = Array.isArray(inv.payments) ? inv.payments : [];
+
+    if (status === 'betald') {
+      /* Betald med ett tryck: det som ar kvar registreras som en inbetalning
+         i dag. Den markeras auto sa att ett felklick gar att angra. */
+      var rest = invoiceBalance(inv);
+      if (rest > CENT) {
+        inv.payments = list.concat({
+          id: uid(), date: todayISO(), amount: rest, note: '', auto: true,
+          createdAt: new Date().toISOString()
+        });
+        syncPaidStatus(inv);
+      } else {
+        inv.status = 'betald';
+        inv.paidDate = inv.paidDate || todayISO();
+      }
+      save();
+      return true;
+    }
+
+    /* Tillbaka fran Betald: inbetalningen som lades in av sig sjalv tas bort
+       igen. Det som registrerats for hand ligger kvar. */
+    if (inv.status === 'betald') {
+      var keep = list.filter(function (p) { return !p.auto; });
+      if (keep.length && sumPayments(keep) >= Number(inv.total || 0) - CENT) return false;
+      inv.payments = keep;
+    }
     inv.status = status;
-    inv.paidDate = status === 'betald' ? (inv.paidDate || todayISO()) : null;
+    inv.paidDate = null;
     save();
+    return true;
+  }
+
+  /* ---------- Inbetalningar och delbetalningsplan ----------
+
+     En faktura kan betalas i omgangar. inv.payments ar det som faktiskt
+     kommit in: [{ id, date, amount, note }]. inv.plan ar det som gjorts upp
+     med kunden: [{ dueDate, amount }], som summerar till fakturans belopp.
+     Status Betald foljer inbetalningarna - nar de tacker hela beloppet ar
+     fakturan betald, med datumet da sista kronan kom in.
+
+     Aldre fakturor har inga inbetalningar. Dar betyder Betald att hela
+     beloppet kom in pa paidDate. */
+
+  var CENT = 0.005; // mindre an ett halvt ore ar avrundning, ingen skuld
+
+  function invoicePayments(inv) {
+    return (inv && Array.isArray(inv.payments) ? inv.payments : []).slice()
+      .sort(function (a, b) {
+        if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+        return (a.createdAt || '') < (b.createdAt || '') ? -1 : 1;
+      });
+  }
+
+  function sumPayments(list) {
+    return round2(list.reduce(function (s, p) { return s + Number(p.amount || 0); }, 0));
+  }
+
+  function invoicePaid(inv) {
+    if (!inv) return 0;
+    var list = invoicePayments(inv);
+    if (!list.length) return inv.status === 'betald' ? Number(inv.total || 0) : 0;
+    return sumPayments(list);
+  }
+
+  function invoiceBalance(inv) {
+    if (!inv) return 0;
+    return Math.max(0, round2(Number(inv.total || 0) - invoicePaid(inv)));
+  }
+
+  /* Status och betaldatum efter varje andring av inbetalningarna. En
+     inbetalning betyder ocksa att fakturan uppenbarligen ar skickad. */
+  function syncPaidStatus(inv) {
+    var list = invoicePayments(inv);
+    var total = Number(inv.total || 0);
+    var sum = 0, paidOn = null;
+    list.forEach(function (p) {
+      sum = round2(sum + Number(p.amount || 0));
+      if (!paidOn && sum >= total - CENT) paidOn = p.date;
+    });
+    if (paidOn) {
+      inv.status = 'betald';
+      inv.paidDate = paidOn;
+    } else {
+      if (list.length || inv.status === 'betald') inv.status = 'skickad';
+      inv.paidDate = null;
+    }
+  }
+
+  function savePayment(invoiceId, p) {
+    var inv = invoice(invoiceId);
+    if (!inv) return null;
+    var list = Array.isArray(inv.payments) ? inv.payments.slice() : [];
+    var clean = { date: p.date, amount: round2(p.amount), note: p.note || '' };
+    var i = p.id ? list.findIndex(function (x) { return x.id === p.id; }) : -1;
+    if (i >= 0) {
+      /* Andrad for hand ar den inte langre automatisk. */
+      list[i] = Object.assign({}, list[i], clean, { auto: false });
+    } else {
+      clean.id = uid();
+      clean.createdAt = new Date().toISOString();
+      list.push(clean);
+    }
+    inv.payments = list;
+    syncPaidStatus(inv);
+    save();
+    return i >= 0 ? p.id : clean.id;
+  }
+
+  function deletePayment(invoiceId, paymentId) {
+    var inv = invoice(invoiceId);
+    if (!inv) return;
+    inv.payments = (inv.payments || []).filter(function (x) { return x.id !== paymentId; });
+    syncPaidStatus(inv);
+    save();
+  }
+
+  /* plan: [{ dueDate, amount }], eller null for att ta bort planen. */
+  function setInvoicePlan(invoiceId, plan) {
+    var inv = invoice(invoiceId);
+    if (!inv) return;
+    if (plan && plan.length) {
+      inv.plan = plan.map(function (d) {
+        return { dueDate: d.dueDate, amount: round2(d.amount) };
+      }).sort(function (a, b) { return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0; });
+    } else {
+      delete inv.plan;
+    }
+    save();
+  }
+
+  /* Delbetalningarna med det som kommit in fordelat i tur och ordning - den
+     forsta kronan gar till den forsta delbetalningen. */
+  function planStatus(inv, today) {
+    today = today || todayISO();
+    var left = invoicePaid(inv);
+    return ((inv && inv.plan) || []).map(function (d, i) {
+      var amount = Number(d.amount || 0);
+      var paid = round2(Math.min(amount, Math.max(0, left)));
+      left = round2(left - paid);
+      var rest = round2(amount - paid);
+      return {
+        n: i + 1, dueDate: d.dueDate, amount: amount, paid: paid, rest: rest,
+        done: rest <= CENT, overdue: rest > CENT && !!d.dueDate && d.dueDate < today
+      };
+    });
+  }
+
+  /* Forfallen: med en plan om nagon delbetalning passerat sitt datum utan
+     att vara betald, annars om fakturans forfallodatum passerats. */
+  function invoiceOverdue(inv, today) {
+    today = today || todayISO();
+    if (invoiceBalance(inv) <= CENT) return false;
+    if (inv.plan && inv.plan.length) {
+      return planStatus(inv, today).some(function (d) { return d.overdue; });
+    }
+    return !!(inv.dueDate && inv.dueDate < today);
+  }
+
+  /* Hur stor andel av fakturan som betalades in mellan from och to, och den
+     sista betaldagen i perioden. For kontantmetoden: en delbetalning tar med
+     sig sin andel av forsaljningen och momsen till perioden da pengarna kom. */
+  function paidShareIn(inv, from, to) {
+    var inRange = function (d) { return d && (!from || d >= from) && (!to || d <= to); };
+    var list = invoicePayments(inv);
+    var total = Number(inv.total || 0);
+
+    if (!list.length || !(total > 0)) {
+      var d = inv.status === 'betald' ? inv.paidDate : null;
+      return inRange(d) ? { share: 1, date: d } : { share: 0, date: null };
+    }
+
+    /* Overbetalning raknas inte - andelarna slutar pa hela fakturan. */
+    var acc = 0, share = 0, last = null;
+    list.forEach(function (p) {
+      var s = Math.min(Number(p.amount || 0) / total, Math.max(0, 1 - acc));
+      acc += s;
+      if (s > 0 && inRange(p.date)) { share += s; last = p.date; }
+    });
+    return { share: share, date: last };
   }
 
   /* Tar bort fakturan och frigor tidsposter och material sa de kan faktureras igen. */
@@ -1158,6 +1344,10 @@
     invoices: invoices, invoice: invoice, createInvoice: createInvoice, peekInvoiceNumber: peekInvoiceNumber,
     setInvoiceStatus: setInvoiceStatus, setInvoiceRotClaimed: setInvoiceRotClaimed,
     deleteInvoice: deleteInvoice,
+    invoicePayments: invoicePayments, invoicePaid: invoicePaid, invoiceBalance: invoiceBalance,
+    savePayment: savePayment, deletePayment: deletePayment,
+    setInvoicePlan: setInvoicePlan, planStatus: planStatus, invoiceOverdue: invoiceOverdue,
+    paidShareIn: paidShareIn,
     company: company, settings: settings, saveCompany: saveCompany, saveSettings: saveSettings,
     exportJSON: exportJSON, importJSON: importJSON, resetAll: resetAll,
     memberJob: memberJob, isMemberItem: isMemberItem, ataApplies: ataApplies,
