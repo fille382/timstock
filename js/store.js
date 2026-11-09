@@ -554,7 +554,10 @@
   function customCeiling(c, year) {
     if (!c) return null;
     var own = c.rotCeiling;
-    if (own === '' || own === null || own === undefined || !(Number(own) > 0)) return null;
+    /* Tomt = okant. Noll ar daremot en riktig uppgift: kunden har anvant
+       hela utrymmet och inget mer avdrag far goras i ar. */
+    if (own === '' || own === null || own === undefined) return null;
+    if (!isFinite(Number(own)) || Number(own) < 0) return null;
     if (String(c.rotCeilingYear || '') !== String(year)) return null;
     return Number(own);
   }

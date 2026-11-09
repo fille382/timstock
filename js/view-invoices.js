@@ -910,10 +910,17 @@
       return html;
     }
 
+    if (r.capped && !r.available) {
+      html += note('warn', 'Inget ROT-utrymme kvar',
+        'Kunden har inget ROT-utrymme kvar i år, så inget avdrag görs. Kunden betalar hela '
+        + U.money(sums.total) + '.');
+      return html;
+    }
+
     if (r.capped) {
       html += note('warn', 'Kundens utrymme tar slut',
         'Avdraget skulle bli ' + U.money(r.raw) + ' men kunden har bara ' + U.money(r.available)
-        + ' kvar av ' + U.money(r.ceiling) + ' i år. Mellanskillnaden hamnar på kundens faktura.');
+        + ' kvar i år. Mellanskillnaden hamnar på kundens faktura.');
     }
 
     html += note('ok', 'ROT-avdrag',

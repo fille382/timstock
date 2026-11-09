@@ -512,14 +512,14 @@
      var begarda nar kunden kollade ar inraknade i siffran. */
   function rotCeilingField(c, s) {
     var year = S.todayISO().slice(0, 4);
-    var stale = c && c.rotCeiling && c.rotCeilingYear
-      && String(c.rotCeilingYear) !== year;
+    var has = c && c.rotCeiling !== '' && c.rotCeiling !== null && c.rotCeiling !== undefined;
+    var stale = has && c.rotCeilingYear && String(c.rotCeilingYear) !== year;
 
-    var html = '<div class="field"><label for="c-rot-ceiling">Kundens ROT-utrymme ' + year
+    var html = '<div class="field"><label for="c-rot-ceiling">Kvar av kundens ROT-utrymme ' + year
       + ' (kr)</label>'
       + '<input type="number" id="c-rot-ceiling" inputmode="numeric" step="100" min="0" value="'
-      + U.esc(c && c.rotCeiling && !stale ? c.rotCeiling : '') + '" placeholder="'
-      + U.esc(s.rotMaxPerYear) + ' (hela taket)">';
+      + U.esc(has && !stale ? c.rotCeiling : '') + '" placeholder="Okänt – räknar med '
+      + U.esc(s.rotMaxPerYear) + '">';
 
     if (stale) {
       html += '<p class="small warn-text" style="margin:6px 0 0">Den tidigare siffran ('
@@ -527,7 +527,9 @@
         + ' och används inte längre — nytt år, nytt utrymme. Be kunden kolla igen.</p>';
     }
 
-    html += '<p class="small muted" style="margin:6px 0 0">Taket gäller allt ROT och RUT '
+    html += '<p class="small" style="margin:6px 0 0"><b>Skriv beloppet som är kvar, inte det '
+      + 'som är använt.</b> Har kunden redan använt hela utrymmet, skriv 0.</p>'
+      + '<p class="small muted" style="margin:6px 0 0">Taket gäller allt ROT och RUT '
       + 'kunden får under året, oavsett vilka som utför jobben — så bara kunden själv kan se '
       + 'siffran, på Mina sidor hos Skatteverket. Fråga innan jobbet börjar och fyll i här. '
       + 'Lämnas fältet tomt räknar appen på hela taket och det den själv vet: dina egna '
@@ -538,8 +540,9 @@
     if (c && c.id) {
       var r = S.rotFor(c.id, 0, 0, null, null);
       html += '<div class="totals" style="margin-top:10px">'
-        + '<div class="totals-row"><span class="muted">Tak ' + U.esc(r.year)
-        + (r.customCeiling ? ' (kundens uppgift)' : '') + '</span><span>'
+        + '<div class="totals-row"><span class="muted">'
+        + (r.customCeiling ? 'Kvar ' + U.esc(r.year) + ' enligt kunden' : 'Tak ' + U.esc(r.year))
+        + '</span><span>'
         + U.money0(r.ceiling) + '</span></div>'
         + (r.used
           ? '<div class="totals-row"><span class="muted">− dina fakturor</span><span>'
@@ -620,7 +623,7 @@
     if (!ceiling) {
       ceilingYear = null;
       ceilingDate = null;
-    } else if (ceiling !== String(prev.rotCeiling || '') || !ceilingYear) {
+    } else if (ceiling !== String(prev.rotCeiling == null ? '' : prev.rotCeiling) || !ceilingYear) {
       ceilingYear = S.todayISO().slice(0, 4);
       ceilingDate = S.todayISO();
     }
